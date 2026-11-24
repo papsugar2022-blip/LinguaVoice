@@ -162,14 +162,21 @@ def command(args, root, report, cancelled, env=None):
             raise RuntimeError('这一步没有完成。可点击重试；详细原因保存在安装目录 private/setup.log。')
 
 
-def install(root, report, cancelled, with_gpt=False):
+def required_space_gb(with_gpt, with_qwen):
+    if not with_gpt and not with_qwen:
+        raise ValueError('请至少勾选一种声音支持')
+    return 30 if with_gpt and with_qwen else (20 if with_gpt else 15)
+
+
+def install(root, report, cancelled, with_gpt=False, with_qwen=True):
+    space_gb=required_space_gb(with_gpt,with_qwen)
     root=Path(root).resolve()
     if root == Path(root.anchor) or any(c in str(root) for c in '\r\n%&|<>^'):
         raise ValueError('请选择普通文件夹路径，例如 D:\\AIProjects\\LinguaVoice')
     if root.exists() and any(root.iterdir()) and not (root/'linguavoice/storage.py').is_file():
         raise ValueError('这个文件夹已有其他文件，请选一个空文件夹；不会修改其他工程')
     root.mkdir(parents=True,exist_ok=True);(root/'private').mkdir(exist_ok=True)
-    if shutil.disk_usage(root).free < 30*1024**3:raise ValueError('安装盘至少需要 30 GB 可用空间')
+    if shutil.disk_usage(root).free < space_gb*1024**3:raise ValueError(f'所选组件安装时需预留 {space_gb} GB 可用空间（含解压和缓存，不是下载量）')
     try:
         gpu=subprocess.run(['nvidia-smi','--query-gpu=name,memory.total,driver_version','--format=csv,noheader'],capture_output=True,encoding='utf-8',errors='replace',timeout=15,creationflags=FLAGS)
         if gpu.returncode or not gpu.stdout.strip():raise RuntimeError()
@@ -206,27 +213,28 @@ def install(root, report, cancelled, with_gpt=False):
     command([python,'-m','pip','install','-r',root/'requirements-console.txt'],root,report,cancelled,env)
     runtime_file=root/'private/runtimes.json'
     runtimes=json.loads(runtime_file.read_text(encoding='utf-8')) if runtime_file.is_file() else {}
-    # An existing explicitly configured provider can be reused after actual compatibility checks.
-    configured=runtimes.get('qwen3-tts',{})
-    qpython=Path(configured.get('python') or root/'.engines/qwen3-tts/Scripts/python.exe')
-    qprobe="import torch,transformers,faster_qwen3_tts; import importlib.metadata as m; assert torch.__version__=='2.9.1+cu128'; assert transformers.__version__=='5.15.1'; assert m.version('faster-qwen3-tts')=='0.5.4'; assert torch.cuda.is_available()"
-    ok=qpython.is_file() and subprocess.run([str(qpython),'-c',qprobe],capture_output=True,creationflags=FLAGS).returncode==0
-    if not ok:
-        # Never alter an externally configured environment. Repair our own provider environment.
-        qpython=prepare_python('.engines/qwen3-tts')
-        report('正在安装默认声音引擎')
-        command([qpython,'-m','pip','install','torch==2.9.1','torchaudio==2.9.1','--index-url','https://download.pytorch.org/whl/cu128'],root,report,cancelled,env)
-        command([qpython,'-m','pip','install','-r',root/'requirements-qwen.txt'],root,report,cancelled,env)
-    model=Path(configured.get('model_dir') or root/'models/Qwen3-TTS-12Hz-0.6B-Base')
-    if not model.is_relative_to(root):
-        complete=all((model/i['path']).is_file() and digest(model/i['path'])==i['sha256'] for i in manifest['qwen']['files'])
-        if not complete:model=root/'models/Qwen3-TTS-12Hz-0.6B-Base'
-    for item in manifest['qwen']['files']:
-        download(item,model/item['path'],report,cancelled)
-    runtimes['qwen3-tts']={'python':str(qpython),'model_dir':str(model)}
-    runtime_file.write_text(json.dumps(runtimes,indent=2),encoding='utf-8')
-    command([qpython,'-m','pip','check'],root,report,cancelled,env)
-    command([qpython,'-c',qprobe],root,report,cancelled,env)
+    if with_qwen:
+        # An existing explicitly configured provider can be reused after actual compatibility checks.
+        configured=runtimes.get('qwen3-tts',{})
+        qpython=Path(configured.get('python') or root/'.engines/qwen3-tts/Scripts/python.exe')
+        qprobe="import torch,transformers,faster_qwen3_tts; import importlib.metadata as m; assert torch.__version__=='2.9.1+cu128'; assert transformers.__version__=='5.15.1'; assert m.version('faster-qwen3-tts')=='0.5.4'; assert torch.cuda.is_available()"
+        ok=qpython.is_file() and subprocess.run([str(qpython),'-c',qprobe],capture_output=True,creationflags=FLAGS).returncode==0
+        if not ok:
+            # Never alter an externally configured environment. Repair our own provider environment.
+            qpython=prepare_python('.engines/qwen3-tts')
+            report('正在安装所选的秋猫声音引擎')
+            command([qpython,'-m','pip','install','torch==2.9.1','torchaudio==2.9.1','--index-url','https://download.pytorch.org/whl/cu128'],root,report,cancelled,env)
+            command([qpython,'-m','pip','install','-r',root/'requirements-qwen.txt'],root,report,cancelled,env)
+        model=Path(configured.get('model_dir') or root/'models/Qwen3-TTS-12Hz-0.6B-Base')
+        if not model.is_relative_to(root):
+            complete=all((model/i['path']).is_file() and digest(model/i['path'])==i['sha256'] for i in manifest['qwen']['files'])
+            if not complete:model=root/'models/Qwen3-TTS-12Hz-0.6B-Base'
+        for item in manifest['qwen']['files']:
+            download(item,model/item['path'],report,cancelled)
+        runtimes['qwen3-tts']={'python':str(qpython),'model_dir':str(model)}
+        runtime_file.write_text(json.dumps(runtimes,indent=2),encoding='utf-8')
+        command([qpython,'-m','pip','check'],root,report,cancelled,env)
+        command([qpython,'-c',qprobe],root,report,cancelled,env)
     if with_gpt:
         report('正在安装可选 GPT-SoVITS 引擎')
         command([python,'-m','pip','install','torch==2.9.1','torchaudio==2.9.1','--index-url','https://download.pytorch.org/whl/cu128'],root,report,cancelled,env)
@@ -239,13 +247,18 @@ def install(root, report, cancelled, with_gpt=False):
     if not client.is_file():
         archive=download(manifest['tunnel'],cache/'tunnel-client.zip',report,cancelled)
         safe_extract(archive,client.parent)
-    report('正在实际生成默认声音，首次准备需要稍等')
-    command([python,root/'scripts/verify_install.py'],root,report,cancelled,env)
+    (root/'private/install-selection.json').write_text(json.dumps({'qwen':with_qwen,'gpt':with_gpt}),encoding='utf-8')
+    if with_qwen:
+        report('正在实际生成秋猫声音，首次准备需要稍等')
+        command([python,root/'scripts/verify_install.py','--provider','qwen3-tts'],root,report,cancelled,env)
+    if with_gpt:
+        report('正在检查 V5 声音支持；没有角色包时需之后自行导入')
+        command([python,root/'scripts/verify_install.py','--provider','gpt-sovits'],root,report,cancelled,env)
     import winreg
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER,r'Software\LinguaVoice') as key:
         winreg.SetValueEx(key,'InstallPath',0,winreg.REG_SZ,str(root))
-    report('安装完成。秋猫已准备好；连接自己的 ChatGPT 后即可使用。')
-    (root/'private/setup-complete.json').write_text(json.dumps({'runtime_installed':True,'chatgpt_connected':False,'voice_bundled':'default-voice','gpt_installed':with_gpt}),encoding='utf-8')
+    report('所选组件安装完成。请到网页设置选择或导入声音，再连接自己的 ChatGPT。')
+    (root/'private/setup-complete.json').write_text(json.dumps({'runtime_installed':True,'chatgpt_connected':False,'voice_bundled':'default-voice' if with_qwen else None,'gpt_installed':with_gpt,'qwen_installed':with_qwen}),encoding='utf-8')
     return root
 
 
@@ -283,7 +296,7 @@ def main():
     ttk.Style().configure('.',font=('Microsoft YaHei UI',10))
     frame=ttk.Frame(window,padding=24);frame.pack(fill='both',expand=True)
     ttk.Label(frame,text='让 ChatGPT 用你选好的声音说话',font=('Microsoft YaHei UI',16,'bold')).pack(anchor='w')
-    ttk.Label(frame,text='Windows / NVIDIA 显卡。首次安装会下载运行组件，需预留 30 GB。\n默认提供秋猫。其他声音由你按作者许可自行导入；不包含账号或第三方角色录音。',wraplength=650).pack(anchor='w',pady=12)
+    ttk.Label(frame,text='Windows / NVIDIA 显卡。按勾选内容下载，不强制安装秋猫。\nV5 角色包需按作者许可自行导入；不包含账号或第三方角色录音。',wraplength=650).pack(anchor='w',pady=12)
     activation=ttk.LabelFrame(frame,text='日常使用：打开 ChatGPT，直接 @',padding=12)
     activation.pack(fill='x',pady=(0,12))
     ttk.Label(activation,text='输入 @ → 从列表选择 LinguaVoice → 发送你想聊的话。\n不用另发启用口令；同一聊天后续正常交流即可。',font=('Microsoft YaHei UI',10,'bold'),wraplength=680).pack(anchor='w')
@@ -294,8 +307,16 @@ def main():
     entry=ttk.Entry(frame,textvariable=location);entry.pack(fill='x',pady=5)
     ttk.Button(frame,text='选择文件夹',command=lambda:location.set(filedialog.askdirectory() or location.get())).pack(anchor='w')
     ttk.Label(frame,text='使用范围：程序代码为 MIT。第三方组件、模型和参考录音遵守各自许可。\n不允许通过安装包转卖或冒充第三方资源；请保留来源和署名。',wraplength=650).pack(anchor='w',pady=14)
-    extra=tk.BooleanVar(value=False)
-    ttk.Checkbutton(frame,text='同时安装 V5Turbo 声音包支持',variable=extra).pack(anchor='w')
+    extra=tk.BooleanVar(value=True);qwen=tk.BooleanVar(value=False)
+    choices=ttk.Frame(frame);choices.pack(fill='x')
+    ttk.Checkbutton(choices,text='自定义导入（V5Turbo 声音包）',variable=extra).pack(side='left')
+    ttk.Checkbutton(choices,text='自带声音（作者自制：秋猫）',variable=qwen).pack(side='left',padx=12)
+    space=tk.StringVar()
+    def show_space(*_):
+        try:space.set(f'安装时建议预留 {required_space_gb(extra.get(),qwen.get())} GB（含解压缓存，不是下载量）。未勾选不会卸载已有声音。')
+        except ValueError:space.set('请至少勾选一项；只用 V5 角色包无需勾选秋猫。')
+    extra.trace_add('write',show_space);qwen.trace_add('write',show_space);show_space()
+    ttk.Label(frame,textvariable=space,wraplength=680).pack(anchor='w',pady=(4,0))
     notices=tk.StringVar(value='已经连接过：直接回 ChatGPT 使用。只有首次配置或连接异常时才需要下方连接设置。')
     ttk.Label(frame,textvariable=notices,wraplength=650).pack(anchor='w',pady=10)
     bar=ttk.Progressbar(frame,mode='determinate',value=0)
@@ -304,12 +325,14 @@ def main():
     def begin():
         nonlocal running
         if running:return
+        try:required_space_gb(extra.get(),qwen.get())
+        except ValueError as exc:notices.set(str(exc));return
         running=True;cancelled.clear();start_button.config(state='disabled');entry.config(state='disabled');bar.config(mode='indeterminate');bar.pack(fill='x',pady=8,before=buttons);bar.start()
-        target=location.get();include_gpt=extra.get()
+        target=location.get();include_gpt=extra.get();include_qwen=qwen.get()
         def worker():
             try:
-                install(target,lambda text:messages.put(('progress',text)),cancelled,include_gpt)
-                messages.put(('done','安装完成。请到网页设置试听，再完成首次连接。以后回 ChatGPT 直接 @ 使用。'))
+                install(target,lambda text:messages.put(('progress',text)),cancelled,include_gpt,include_qwen)
+                messages.put(('done','安装完成。请到网页设置导入 / 选择声音并试听，再完成首次连接。以后回 ChatGPT 直接 @ 使用。'))
             except Exception as exc:messages.put(('done',str(exc)))
         threading.Thread(target=worker,daemon=True).start()
     def launch(script):

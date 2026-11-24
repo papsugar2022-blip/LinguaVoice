@@ -51,7 +51,9 @@ class Store:
             self.data = {'schema_version': 1, 'settings': {'speed': 1.0, 'autoplay': True,
                 'speech_enabled': True, 'desktop_playback': True, 'default_voice': '', 'role_bindings': {}}, 'voices': {}}
             if directory is None:
-                voice = self.default_voice()
+                selection_path=ROOT/'private/install-selection.json'
+                selection=json.loads(selection_path.read_text(encoding='utf-8')) if selection_path.is_file() else {}
+                voice = self.default_voice() if selection.get('qwen',True) else None
                 if voice:
                     self.data['voices'][voice['id']] = voice
                     self.data['settings']['default_voice'] = voice['id']

@@ -79,7 +79,7 @@ async def resource_diagnostics(ctx, call_next):
             pass
 
 
-server = MCPServer('LinguaVoice', version='0.3.4', instructions=INSTRUCTIONS,
+server = MCPServer('LinguaVoice', version='0.3.5', instructions=INSTRUCTIONS,
                    middleware=[resource_diagnostics])
 REPLAY_UI = 'ui://linguavoice/replay-v3.html'
 CHATGPT_REPLAY_UI = 'ui://linguavoice/replay-chatgpt-v3.html'
