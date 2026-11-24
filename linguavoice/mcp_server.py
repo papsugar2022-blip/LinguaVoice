@@ -58,7 +58,52 @@ def request(path, body=None, raw=False):
         raise ValueError(message) from None
 
 
-server = MCPServer('LinguaVoice', version='0.2.0', instructions=INSTRUCTIONS)
+async def resource_diagnostics(ctx, call_next):
+    # Opt-in local diagnostics: record only method/status, never arguments or audio.
+    enabled = (ROOT/'private/replay-diagnostics.enabled').is_file()
+    watched = ctx.method in {'resources/list', 'resources/templates/list', 'resources/read', 'tools/list'}
+    if not (enabled and watched):
+        return await call_next(ctx)
+    outcome = 'ok'
+    try:
+        return await call_next(ctx)
+    except Exception:
+        outcome = 'error'
+        raise
+    finally:
+        try:
+            with (ROOT/'private/replay-resource-trace.jsonl').open('a', encoding='utf-8') as log:
+                log.write(json.dumps({'time': time.time(), 'pid': os.getpid(),
+                                      'method': ctx.method, 'outcome': outcome})+'\n')
+        except OSError:
+            pass
+
+
+server = MCPServer('LinguaVoice', version='0.3.4', instructions=INSTRUCTIONS,
+                   middleware=[resource_diagnostics])
+REPLAY_UI = 'ui://linguavoice/replay-v3.html'
+CHATGPT_REPLAY_UI = 'ui://linguavoice/replay-chatgpt-v3.html'
+CARD_META = {'ui': {'resourceUri': REPLAY_UI}, 'openai/outputTemplate': CHATGPT_REPLAY_UI}
+
+
+@server.resource(REPLAY_UI, mime_type='text/html;profile=mcp-app',
+                 meta={'ui': {'prefersBorder': True}})
+@server.resource('ui://linguavoice/replay-v2.html', mime_type='text/html;profile=mcp-app',
+                 meta={'ui': {'prefersBorder': True}})
+@server.resource('ui://linguavoice/replay-v1.html', mime_type='text/html;profile=mcp-app',
+                 meta={'ui': {'prefersBorder': True}})
+def replay_card() -> str:
+    return (ROOT/'linguavoice/web/replay.html').read_text(encoding='utf-8')
+
+
+@server.resource(CHATGPT_REPLAY_UI, mime_type='text/html+skybridge',
+                 meta={'openai/widgetPrefersBorder': True,
+                       'openai/widgetAccessible': True})
+@server.resource('ui://linguavoice/replay-chatgpt-v2.html', mime_type='text/html+skybridge',
+                 meta={'openai/widgetPrefersBorder': True,
+                       'openai/widgetAccessible': True})
+def chatgpt_replay_card() -> str:
+    return replay_card().replace('const legacy=false;', 'const legacy=true;')
 READ = types.ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
 WRITE = types.ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False)
 
@@ -86,7 +131,7 @@ async def audio_result(job_id):
         types.AudioContent(data=base64.b64encode(audio).decode('ascii'), mimeType='audio/wav')], structuredContent=metadata)
 
 
-@server.tool(annotations=WRITE, structured_output=False)
+@server.tool(annotations=WRITE, structured_output=False, meta=CARD_META)
 async def linguavoice_speak(text: str, voice_id: str | None = None, role: str | None = None,
         language: Literal['zh','en','ja','ko','yue','de','fr','ru','pt','es','it'] = 'zh', speed: float | None = None,
         hide_text: bool = False) -> types.CallToolResult:
@@ -104,13 +149,36 @@ async def linguavoice_speak(text: str, voice_id: str | None = None, role: str | 
         structuredContent={'id':job['id'],'status':job['status']})
 
 
-@server.tool(annotations=READ, structured_output=False)
+@server.tool(annotations=READ, structured_output=False, meta=CARD_META)
 async def linguavoice_get_audio(job_id: str) -> types.CallToolResult:
-    """获取已提交任务的状态或真实音频，适合等待首次加载以及重播。不会重新合成。"""
+    """获取已提交任务的状态或音频，不会重新合成或触发电脑重播。要求重播时请用 linguavoice_replay。"""
     if len(job_id)!=32 or any(c not in '0123456789abcdef' for c in job_id):
         raise ValueError('无效任务ID')
     await asyncio.to_thread(ensure_service)
     return await audio_result(job_id)
+
+
+@server.tool(annotations=READ, structured_output=False, meta=CARD_META)
+async def linguavoice_show_player(job_id: str) -> types.CallToolResult:
+    """显示已有语音的“再听一遍”按钮。用户说没找到按钮、要播放卡片时调用本工具，将卡片呈现给用户，不要只口头说有按钮。job_id 取本对话此前语音返回的 id。只显示播放器，不重新合成、不自动重播、不返回整段音频。"""
+    if len(job_id) != 32 or any(c not in '0123456789abcdef' for c in job_id):
+        raise ValueError('无效任务ID；请使用本对话此前语音返回的 id')
+    await asyncio.to_thread(ensure_service)
+    job = await asyncio.to_thread(request, '/api/jobs/' + job_id)
+    metadata = {k: job[k] for k in ('id', 'status', 'voice_name', 'seconds') if k in job}
+    return types.CallToolResult(
+        content=[types.TextContent(text='已返回这段录音的播放卡片。请向用户呈现工具界面；若当前宿主未显示卡片，应如实说明，不能把已返回说成用户已看到。')],
+        structuredContent=metadata, isError=job['status'] in {'error', 'cancelled'})
+
+
+@server.tool(annotations=WRITE, structured_output=False, meta={'ui': {'visibility': ['model', 'app']}, 'openai/widgetAccessible': True})
+async def linguavoice_replay(job_id: str) -> types.CallToolResult:
+    """用户说再听一遍、重播上一句时，重播当前对话中对应的已有录音，不重新合成。job_id 必须取自本对话之前 speak/get_audio 的返回 id，不要猜测或使用其他对话的最近任务。无需用户填写编号。后台播放需已开启；返回 queued 只代表已排队，不代表已播放完成。"""
+    if len(job_id)!=32 or any(c not in '0123456789abcdef' for c in job_id):
+        raise ValueError('无效任务ID；请使用本对话此前语音返回的 id')
+    await asyncio.to_thread(ensure_service)
+    result = await asyncio.to_thread(request, '/api/replay', {'job_id':job_id})
+    return types.CallToolResult(content=[types.TextContent(text='已请求重播这段录音，无需重新合成。')], structuredContent=result)
 
 
 @server.tool(annotations=WRITE)

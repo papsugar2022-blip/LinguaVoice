@@ -48,7 +48,7 @@ def register():
             (ROOT/'private/plugin-registration.log').write_text(result.stderr+'\n'+result.stdout,encoding='utf-8')
             raise RuntimeError('桌面客户端未完成插件安装，详情已保存在本机日志。请确认客户端支持本地插件。')
     (ROOT/'private/desktop-plugin-installed.json').write_text(json.dumps({'installed':True}),encoding='utf-8')
-    return '本地插件已安装。请重新打开支持本地插件的新会话并启用 LinguaVoice；无需运行密钥。免费账号能力仍取决于客户端和额度。'
+    return 'Work / Codex 本地插件已安装。普通 ChatGPT 聊天请保留并使用原来的安全连接；它们不是新旧版本。免费账号能力仍需实际验证。'
 
 if __name__=='__main__':
     print(register())

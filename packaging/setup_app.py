@@ -277,13 +277,18 @@ def install_gpt(root,python,manifest,cache,report,cancelled,env):
 
 
 def main():
-    window=tk.Tk();window.title('LinguaVoice · 安装与启动');window.geometry('740x570')
+    window=tk.Tk();window.title('LinguaVoice · 安装与启动');window.geometry('780x650')
     icon=ASSETS/'linguavoice.ico' if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[1]/'assets/branding/linguavoice.ico'
     if icon.is_file():window.iconbitmap(str(icon))
     ttk.Style().configure('.',font=('Microsoft YaHei UI',10))
     frame=ttk.Frame(window,padding=24);frame.pack(fill='both',expand=True)
     ttk.Label(frame,text='让 ChatGPT 用你选好的声音说话',font=('Microsoft YaHei UI',16,'bold')).pack(anchor='w')
     ttk.Label(frame,text='Windows / NVIDIA 显卡。首次安装会下载运行组件，需预留 30 GB。\n默认提供秋猫。其他声音由你按作者许可自行导入；不包含账号或第三方角色录音。',wraplength=650).pack(anchor='w',pady=12)
+    activation=ttk.LabelFrame(frame,text='日常使用：打开 ChatGPT，直接 @',padding=12)
+    activation.pack(fill='x',pady=(0,12))
+    ttk.Label(activation,text='输入 @ → 从列表选择 LinguaVoice → 发送你想聊的话。\n不用另发启用口令；同一聊天后续正常交流即可。',font=('Microsoft YaHei UI',10,'bold'),wraplength=680).pack(anchor='w')
+    ttk.Label(activation,text='停止播放：在聊天里说“停止播放”，或点网页里的“停止播放”。\n关闭后续语音：打开“网页设置”，关掉“让 AI 说话”；重新打开即可恢复。',wraplength=680).pack(anchor='w',pady=(6,0))
+    ttk.Label(activation,text='首次安装并连接一次；新聊天再 @ 选择插件。\n网页开启“登录电脑后自动准备”后，日常不用再开安装器。',wraplength=680).pack(anchor='w',pady=(6,0))
     location=tk.StringVar(value=r'D:\AIProjects\LinguaVoice' if Path('D:/').exists() else str(Path.home()/'LinguaVoice'))
     ttk.Label(frame,text='安装位置').pack(anchor='w')
     entry=ttk.Entry(frame,textvariable=location);entry.pack(fill='x',pady=5)
@@ -291,7 +296,7 @@ def main():
     ttk.Label(frame,text='使用范围：程序代码为 MIT。第三方组件、模型和参考录音遵守各自许可。\n不允许通过安装包转卖或冒充第三方资源；请保留来源和署名。',wraplength=650).pack(anchor='w',pady=14)
     extra=tk.BooleanVar(value=False)
     ttk.Checkbutton(frame,text='同时安装 V5Turbo 声音包支持',variable=extra).pack(anchor='w')
-    notices=tk.StringVar(value='安装过的电脑可直接点“打开设置”，不必重新安装。')
+    notices=tk.StringVar(value='已经连接过：直接回 ChatGPT 使用。只有首次配置或连接异常时才需要下方连接设置。')
     ttk.Label(frame,textvariable=notices,wraplength=650).pack(anchor='w',pady=10)
     bar=ttk.Progressbar(frame,mode='determinate',value=0)
     messages=queue.Queue();cancelled=threading.Event();running=False
@@ -304,7 +309,7 @@ def main():
         def worker():
             try:
                 install(target,lambda text:messages.put(('progress',text)),cancelled,include_gpt)
-                messages.put(('done','安装完成。默认声音已实际生成，请打开设置试听，再连接 ChatGPT。'))
+                messages.put(('done','安装完成。请到网页设置试听，再完成首次连接。以后回 ChatGPT 直接 @ 使用。'))
             except Exception as exc:messages.put(('done',str(exc)))
         threading.Thread(target=worker,daemon=True).start()
     def launch(script):
@@ -313,8 +318,8 @@ def main():
         if not python.is_file():notices.set('请先安装程序。');return
         subprocess.Popen([str(python),*script],cwd=root,creationflags=FLAGS)
     start_button=ttk.Button(buttons,text='安装 / 检查修复',command=begin);start_button.pack(side='left',padx=3)
-    ttk.Button(buttons,text='打开设置',command=lambda:launch(['-m','linguavoice.server','--open'])).pack(side='left',padx=3)
-    ttk.Button(buttons,text='连接 ChatGPT',command=lambda:launch(['scripts/connect_chatgpt.py'])).pack(side='left',padx=3)
+    ttk.Button(buttons,text='网页设置',command=lambda:launch(['-m','linguavoice.server','--open'])).pack(side='left',padx=3)
+    ttk.Button(buttons,text='首次连接 / 修复',command=lambda:launch(['scripts/connect_chatgpt.py'])).pack(side='left',padx=3)
     ttk.Button(buttons,text='停止安装',command=cancelled.set).pack(side='left',padx=3)
     def poll():
         nonlocal running
