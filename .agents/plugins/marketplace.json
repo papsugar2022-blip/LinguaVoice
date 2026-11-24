@@ -1,0 +1,15 @@
+{
+  "name": "linguavoice-local",
+  "interface": {
+    "displayName": "LinguaVoice 本机声音"
+  },
+  "plugins": [
+    {
+      "name": "linguavoice",
+      "source": {
+        "source": "local",
+        "path": "./desktop-plugin"
+      }
+    }
+  ]
+}

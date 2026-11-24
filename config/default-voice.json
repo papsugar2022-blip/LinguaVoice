@@ -1,0 +1,31 @@
+{
+  "id": "default-voice",
+  "name": "秋猫",
+  "provider": "qwen3-tts",
+  "version": "0.6B-Base",
+  "profile": "reference",
+  "model_dir": "models/Qwen3-TTS-12Hz-0.6B-Base",
+  "reference": {
+    "audio": "assets/default-voice/reference.wav",
+    "text": "主人，晚上好，我是秋猫。先别急着逞强嘛，这件事我们一起想办法。嗯？你说我有点得意？只是刚好想到了一个好主意而已。",
+    "language": "zh"
+  },
+  "references": [
+    {
+      "audio": "assets/default-voice/reference.wav",
+      "text": "主人，晚上好，我是秋猫。先别急着逞强嘛，这件事我们一起想办法。嗯？你说我有点得意？只是刚好想到了一个好主意而已。",
+      "language": "zh"
+    }
+  ],
+  "reference_sha256": "59357207c43a7a1a459880ee36875897e11f63be3144e16d40f71564a07bfdbb",
+  "prompt_file": "assets/default-voice/prompt.pt",
+  "reference_locked": true,
+  "license": "基于 Qwen3-TTS VoiceDesign 文字描述生成的自定义声音；基础模型按 Apache-2.0 使用，保留来源声明。",
+  "provenance": {
+    "author": "本项目自定义合成声音",
+    "source_url": "https://github.com/QwenLM/Qwen3-TTS",
+    "license_status": "generated_from_description",
+    "reference_source": "Qwen3-TTS-12Hz-1.7B-VoiceDesign；未使用游戏角色原始录音",
+    "redistribution_reviewed": false
+  }
+}

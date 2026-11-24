@@ -1,0 +1,6 @@
+interface:
+  display_name: "持续角色语音"
+  short_description: "启用一次后，按语境持续选择角色台词"
+policy:
+  allow_implicit_invocation: true
+

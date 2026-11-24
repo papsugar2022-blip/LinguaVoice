@@ -1,0 +1,7 @@
+mcp==2.3.0
+rich==15.0.0
+sounddevice==0.5.3
+soundfile==0.14.0
+numpy==1.26.4
+pywin32==312; sys_platform == "win32"
+PyYAML==6.0.3
