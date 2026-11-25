@@ -2,7 +2,7 @@
 
 <img src="assets/branding/linguavoice.png" width="96" alt="LinguaVoice 图标">
 
-**v0.3.6 预览版 · Windows / NVIDIA · 自定义导入 / 自带声音自由勾选**
+**v0.3.7 预览版 · Windows / NVIDIA · 自定义导入 / 自带声音自由勾选**
 
 当前为开发预览版：已有电脑上的真实语音合成与播放已验证；全新电脑完整安装、免费 ChatGPT 账号和手机端尚未完成验收。请勿将“可下载安装器”理解为所有账号安装即用。
 

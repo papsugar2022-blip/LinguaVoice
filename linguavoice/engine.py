@@ -72,7 +72,7 @@ class GPTSoVITSBackend:
             self.loaded_key = key
         language_map = {'zh': 'all_zh', 'en': 'en', 'ja': 'all_ja', 'ko': 'all_ko', 'yue': 'all_yue'}
         ref = voice['reference']
-        chunks = list(self.tts.run({'text': text, 'text_lang': language_map[language],
+        chunks = list(self.tts.run({'text': text, 'text_lang': ('zh' if language == 'zh' else language_map[language]),
             'ref_audio_path': ref['audio'], 'prompt_text': ref['text'],
             'prompt_lang': language_map[ref['language']], 'speed_factor': speed,
             'seed': 20261124, **inference_policy, 'batch_size': 1,
