@@ -55,9 +55,15 @@ class ConsoleTests(unittest.TestCase):
         self.assertIsNone(backend.tts)
         self.assertIsNone(backend.loaded_key)
 
-    def test_role_never_falls_back(self):
-        with self.assertRaises(ValueError):self.store.voice(role='unknown')
-        with self.assertRaises(ValueError):self.store.voice(voice_id='other',role='test-role')
+    def test_global_voice_overrides_role_and_explicit_id(self):
+        self.assertEqual(self.store.voice(role='unknown')['id'], 'test')
+        self.assertEqual(self.store.voice(voice_id='other',role='test-role')['id'], 'test')
+        self.store.data['voices']['test']['profile'] = 'original'
+        self.assertEqual(self.store.voice()['profile'], 'cfm-base-50')
+        self.assertEqual(self.store.data['voices']['test']['profile'], 'original')
+        self.store.data['voices']['next'] = dict(self.store.data['voices']['test'], id='next')
+        self.store.update_settings({'default_voice': 'next'})
+        self.assertEqual(self.store.voice(voice_id='test', role='test-role')['id'], 'next')
 
     def test_accepted_profile_is_locked(self):
         with self.assertRaises(ValueError):self.store.choose_reference('test',0)
@@ -94,13 +100,13 @@ class ConsoleTests(unittest.TestCase):
                'voice/dataset/a.wav':audio.getvalue(),'voice/dataset/text.list':'a.wav|speaker|ZH|测试录音'}
         result=self.store.import_zip(self.zip_bytes(files),'Imported fixture',True)
         self.assertEqual(result['reference_count'],1)
-        self.assertEqual(self.store.voice(result['id'])['profile'],'original')
+        self.assertEqual(self.store.snapshot()['voices'][result['id']]['profile'],'original')
         duplicate=self.store.import_zip(self.zip_bytes(files),'Ignored duplicate name',True)
         self.assertTrue(duplicate['duplicate'])
         self.assertEqual(duplicate['id'],result['id'])
         self.assertEqual(len(list((Path(self.tmp.name)/'voices').iterdir())),1)
         self.store.rename_voice(result['id'],'测试角色')
-        self.assertEqual(Store(self.tmp.name).voice(result['id'])['name'],'测试角色')
+        self.assertEqual(Store(self.tmp.name).snapshot()['voices'][result['id']]['name'],'测试角色')
         files['voice/config.json']=json.dumps({'version':'v2'})
         with self.assertRaises(ValueError):self.store.import_zip(self.zip_bytes(files),'wrong version',True)
 

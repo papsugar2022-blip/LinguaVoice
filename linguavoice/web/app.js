@@ -59,7 +59,7 @@ function renderVoices(){
 }
 async function renderVoiceInfo(){
   const v=state?.voices.find(v=>v.id===$('voice').value);
-  $('voiceInfo').textContent=v?(v.reference_locked?'正在使用你已确认的声音配置。':(v.model_selection?'已添加：'+v.model_selection.gpt+' + '+v.model_selection.sovits+'。'+v.model_selection.strategy:'已添加。可以先试听，再用它聊天。')):'先把角色 ZIP 拖到右边，添加一个声音。';
+  $('voiceInfo').textContent=v?'所有对话统一使用：'+v.name+'。'+(v.provider==='gpt-sovits'?'统一使用 J 声音处理参数。':'使用此引擎的声音参数。'):'请先导入一个声音。';
   $('technicalInfo').textContent=v?`模型版本：${v.version} · ${v.reference_count} 段参考录音`:'';
   $('voiceRights').textContent=v?((v.provenance?.author?'作者：'+v.provenance.author+'。':'')+v.license):'';
   const source=v?.provenance?.source_url||'';

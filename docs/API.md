@@ -20,13 +20,13 @@
 | GET | /api/export | 无模型、音频、令牌和路径的设置备份 |
 | POST | /api/import-settings | 导入设置备份；未知音色 ID 拒绝 |
 
-朗读参数：text 1～400 字；language 可为 zh/en/ja/ko/yue（语言质量分别验收）；speed 0.6～1.5，省略使用已保存默认值。role 未绑定、voice_id 不存在、二者冲突均报错。工具不把错误角色回退到默认音色。
+朗读参数：text 1～400 字；language 可为 zh/en/ja/ko/yue（语言质量分别验收）；speed 0.6～1.5，省略使用已保存默认值。role 和 voice_id 保留兼容，但不参与选音；以网页保存的 default_voice 为准。未设置有效全局音色时报错。V5 Turbo 运行时统一使用 cfm-base-50。
 
 MCP 2.3.0，协议 stdout，日志 stderr：
 
 | 工具 | 行为 |
 |---|---|
-| linguavoice_list_voices | 可用音色、设置、角色绑定和播放状态 |
+| linguavoice_list_voices | 可用音色、全局设置、历史绑定和播放状态 |
 | linguavoice_speak | AI 提供选中的文字，真实合成，返回 AudioContent + 元数据 |
 | linguavoice_get_audio | 按任务 ID 获取已有结果，不重新合成 |
 | linguavoice_playback | 请求本机播放器 pause/resume/stop |

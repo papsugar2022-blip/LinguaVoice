@@ -92,6 +92,8 @@ class Store:
             if voice['provider'] == 'gpt-sovits' and voice['version'] not in VERSIONS:
                 continue  # Keep private files and settings; hide engines disabled in this release.
             voices.append({k: voice[k] for k in ('id', 'name', 'provider', 'version', 'profile', 'license')})
+            if voice['provider'] == 'gpt-sovits' and voice['version'] == 'v5turbo':
+                voices[-1]['profile'] = 'cfm-base-50'
             voices[-1]['reference_locked'] = voice.get('reference_locked', False)
             voices[-1]['reference_text'] = voice['reference']['text']
             voices[-1]['reference_count'] = len(voice['references'])
@@ -126,17 +128,15 @@ class Store:
 
     def voice(self, voice_id=None, role=None):
         data = self.snapshot()
-        if role:
-            bound = data['settings']['role_bindings'].get(role)
-            if not bound:
-                raise ValueError('该角色尚未绑定音色；请先在控制台绑定，不会自动冒用其他音色')
-            if voice_id and voice_id != bound:
-                raise ValueError('指定音色与角色绑定冲突，请先在控制台确认')
-            voice_id = bound
-        voice_id = voice_id or data['settings']['default_voice']
+        # The user's global selection overrides both historical role bindings
+        # and voice IDs supplied by an AI with stale conversation context.
+        voice_id = data['settings']['default_voice']
         if voice_id not in data['voices']:
             raise ValueError('未找到指定音色，请先导入并选择')
-        return data['voices'][voice_id]
+        voice = data['voices'][voice_id]
+        if voice['provider'] == 'gpt-sovits' and voice['version'] == 'v5turbo':
+            voice['profile'] = 'cfm-base-50'
+        return voice
 
     def choose_reference(self, voice_id, index):
         with self.lock:

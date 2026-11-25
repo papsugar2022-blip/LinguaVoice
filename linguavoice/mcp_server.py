@@ -135,7 +135,7 @@ async def audio_result(job_id):
 async def linguavoice_speak(text: str, voice_id: str | None = None, role: str | None = None,
         language: Literal['zh','en','ja','ko','yue','de','fr','ru','pt','es','it'] = 'zh', speed: float | None = None,
         hide_text: bool = False) -> types.CallToolResult:
-    """角色主动说话：当前对话启用语音后，后续没有@或朗读指令也继续按语境判断。普通聊天须先向用户显示实际角色台词，再调用本工具，否则声音可能早于正文；听力隐藏原文除外。自行选出角色真正要对用户说的完整台词（1～400字），用于日常聊天、关心、提问、自然讲解或教学示范，无需用户逐句指定。动作描写、旁白、标题和格式通常只留在文字里；按意义判断，不按引号或语言硬切。可以不发声，也可按语义分段多次调用；不要机械全文朗读或重复提交。一次只用一个已绑定角色的音色，未绑定不冒用。speed为0.6～1.5，省略使用控制台默认值。hide_text用于听力折叠原文，文字回复不要泄露答案。返回真实音频不代表已经播放。"""
+    """角色主动说话：当前对话启用语音后，后续没有@或朗读指令也继续按语境判断。普通聊天须先向用户显示实际角色台词，再调用本工具，否则声音可能早于正文；听力隐藏原文除外。自行选出角色真正要对用户说的完整台词（1～400字），用于日常聊天、关心、提问、自然讲解或教学示范，无需用户逐句指定。动作描写、旁白、标题和格式通常只留在文字里；按意义判断，不按引号或语言硬切。可以不发声，也可按语义分段多次调用；不要机械全文朗读或重复提交。所有角色使用网页选中的全局音色；role 与 voice_id 不覆盖此设置，未绑定不阻止调用。speed为0.6～1.5，省略使用控制台默认值。hide_text用于听力折叠原文，文字回复不要泄露答案。返回真实音频不代表已经播放。"""
     await asyncio.to_thread(ensure_service)
     job = await asyncio.to_thread(request, '/api/speak', {'text':text,'voice_id':voice_id,'role':role,
         'language':language,'speed':speed,'hide_text':hide_text,'source':'chatgpt-mcp'})
