@@ -76,7 +76,8 @@ class GPTSoVITSBackend:
             'ref_audio_path': ref['audio'], 'prompt_text': ref['text'],
             'prompt_lang': language_map[ref['language']], 'speed_factor': speed,
             'seed': 20261124, **inference_policy, 'batch_size': 1,
-            'text_split_method': 'cut0', 'parallel_infer': False, 'split_bucket': False,
+            # Keep the final phrase in its own inference segment; long mixed-language input lost tail words.
+            'text_split_method': 'cut5', 'parallel_infer': False, 'split_bucket': False,
             'fragment_interval': 0.0, 'return_fragment': False, 'streaming_mode': False}))
         if not chunks or len({sr for sr, _ in chunks}) != 1:
             raise RuntimeError('合成未返回有效音频')
