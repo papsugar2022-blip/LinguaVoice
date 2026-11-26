@@ -1,7 +1,6 @@
 """MCP adapter. It forwards selected utterances, never reads a chat transcript."""
 import argparse
 import asyncio
-import base64
 import json
 import os
 import subprocess
@@ -12,6 +11,7 @@ import urllib.request
 from typing import Literal
 from mcp.server import MCPServer
 from mcp import types
+from . import __version__
 from .storage import ROOT
 from .instructions import INSTRUCTIONS
 
@@ -79,7 +79,7 @@ async def resource_diagnostics(ctx, call_next):
             pass
 
 
-server = MCPServer('LinguaVoice', version='0.3.5', instructions=INSTRUCTIONS,
+server = MCPServer('LinguaVoice', version=__version__, instructions=INSTRUCTIONS,
                    middleware=[resource_diagnostics])
 REPLAY_UI = 'ui://linguavoice/replay-v3.html'
 CHATGPT_REPLAY_UI = 'ui://linguavoice/replay-chatgpt-v3.html'
@@ -116,26 +116,35 @@ async def linguavoice_list_voices() -> dict:
     return {k:data[k] for k in ('voices','settings','playback','engine_state')}
 
 
-async def audio_result(job_id):
+async def audio_result(job_id, include_audio=False):
     job = await asyncio.to_thread(request, '/api/jobs/'+job_id)
-    if job['status'] != 'ready':
-        return types.CallToolResult(content=[types.TextContent(text=json.dumps(job,ensure_ascii=False))],
-                                    structuredContent=job, isError=job['status']=='error')
-    audio = await asyncio.to_thread(request, job['audio_path'], None, True)
-    if len(audio) > 6*1024*1024:
-        return types.CallToolResult(content=[types.TextContent(text='语音已生成，可在本机控制台播放；单段过长，无法安全嵌入MCP结果。后续请按语义缩短分段。')], structuredContent=job)
-    # Do not return a hidden listening transcript as model-visible text.
-    metadata = {k:job[k] for k in ('id','status','voice_name','language','speed','hide_text','seconds','playback_target') if k in job}
-    metadata.update({k:job[k] for k in ('playback_status','playback_error') if k in job})
-    return types.CallToolResult(content=[types.TextContent(text='已合成私人音色语音；实际播放取决于客户端或本机播放器。'),
-        types.AudioContent(data=base64.b64encode(audio).decode('ascii'), mimeType='audio/wav')], structuredContent=metadata)
+    # Keep transcripts, internal paths and waveforms out of ordinary desktop replies.
+    metadata = {k: job[k] for k in ('id', 'status', 'voice_name', 'language', 'speed',
+        'hide_text', 'seconds', 'playback_target', 'playback_status', 'playback_error') if k in job}
+    status = job['status']
+    if status != 'ready':
+        message = {'queued': '语音已排队，请稍后查询同一任务，不要重新合成。',
+                   'generating': '语音仍在合成，请稍后查询同一任务，不要重新合成。',
+                   'cancelled': '语音任务已取消。',
+                   'error': '语音合成失败，请检查本机服务日志。'}.get(status, '语音尚未就绪。')
+        return types.CallToolResult(content=[types.TextContent(text=message)],
+                                    structuredContent=metadata, isError=status in {'error', 'cancelled'})
+    # Never transport waveforms through model-facing MCP results, including old
+    # clients requesting include_audio=True. The authenticated web player still
+    # serves the original WAV; desktop playback and replay use the same recording.
+    if job.get('playback_target') == 'desktop':
+        message = '语音已生成，由电脑播放器播放；卡片可重播。是否已播放请以播放器状态为准。'
+    else:
+        message = '语音已生成，请在本机声音设置网页播放。聊天工具不回传音频文件。'
+    return types.CallToolResult(content=[types.TextContent(text=message)], structuredContent=metadata)
+
 
 
 @server.tool(annotations=WRITE, structured_output=False, meta=CARD_META)
 async def linguavoice_speak(text: str, voice_id: str | None = None, role: str | None = None,
         language: Literal['zh','en','ja','ko','yue','de','fr','ru','pt','es','it'] = 'zh', speed: float | None = None,
         hide_text: bool = False) -> types.CallToolResult:
-    """角色主动说话：当前对话启用语音后，后续没有@或朗读指令也继续按语境判断。普通聊天须先向用户显示实际角色台词，再调用本工具，否则声音可能早于正文；听力隐藏原文除外。自行选出角色真正要对用户说的完整台词（1～400字），用于日常聊天、关心、提问、自然讲解或教学示范，无需用户逐句指定。动作描写、旁白、标题和格式通常只留在文字里；按意义判断，不按引号或语言硬切。可以不发声，也可按语义分段多次调用；不要机械全文朗读或重复提交。教学必须覆盖本轮目标单词本身、关键例句和实质讲解，不能只读鼓励或总结；列表排版不构成省略词汇的理由。纯英文示范用en，中文夹英文讲解用zh。单个词的发音任务可单独调用。所有角色使用网页选中的全局音色；role 与 voice_id 不覆盖此设置，未绑定不阻止调用。speed为0.6～1.5，省略使用控制台默认值。hide_text用于听力折叠原文，文字回复不要泄露答案。返回真实音频不代表已经播放。"""
+    """角色主动说话：当前对话启用语音后，后续没有@或朗读指令也继续按语境判断。普通聊天须先向用户显示实际角色台词，再调用本工具，否则声音可能早于正文；听力隐藏原文除外。自行选出角色真正要对用户说的完整台词（1～400字），用于日常聊天、关心、提问、自然讲解或教学示范，无需用户逐句指定。动作描写、旁白、标题和格式通常只留在文字里；按意义判断，不按引号或语言硬切。可以不发声，也可按语义分段多次调用；不要机械全文朗读或重复提交。教学必须覆盖本轮目标单词本身、关键例句和实质讲解，不能只读鼓励或总结；列表排版不构成省略词汇的理由。纯英文示范用en，中文夹英文讲解用zh。单个词的发音任务可单独调用。所有角色使用网页选中的全局音色；role 与 voice_id 不覆盖此设置，未绑定不阻止调用。speed为0.6～1.5，省略使用控制台默认值。hide_text用于听力折叠原文，文字回复不要泄露答案。返回合成状态不代表已经播放；音频留在本机，不回传聊天。"""
     await asyncio.to_thread(ensure_service)
     job = await asyncio.to_thread(request, '/api/speak', {'text':text,'voice_id':voice_id,'role':role,
         'language':language,'speed':speed,'hide_text':hide_text,'source':'chatgpt-mcp'})
@@ -150,12 +159,12 @@ async def linguavoice_speak(text: str, voice_id: str | None = None, role: str | 
 
 
 @server.tool(annotations=READ, structured_output=False, meta=CARD_META)
-async def linguavoice_get_audio(job_id: str) -> types.CallToolResult:
-    """获取已提交任务的状态或音频，不会重新合成或触发电脑重播。要求重播时请用 linguavoice_replay。"""
+async def linguavoice_get_audio(job_id: str, include_audio: bool = False) -> types.CallToolResult:
+    """获取已提交任务的状态，不重新合成或触发电脑重播。电脑播放模式默认只返回简短状态和卡片，避免重复传回音频。include_audio仅兼容旧调用，无论其值如何均不返回音频文件；下载或网页播放请使用本机声音设置。要求重播时用 linguavoice_replay。"""
     if len(job_id)!=32 or any(c not in '0123456789abcdef' for c in job_id):
         raise ValueError('无效任务ID')
     await asyncio.to_thread(ensure_service)
-    return await audio_result(job_id)
+    return await audio_result(job_id, include_audio=include_audio)
 
 
 @server.tool(annotations=READ, structured_output=False, meta=CARD_META)

@@ -27,7 +27,7 @@ MCP 2.3.0，协议 stdout，日志 stderr：
 | 工具 | 行为 |
 |---|---|
 | linguavoice_list_voices | 可用音色、全局设置、历史绑定和播放状态 |
-| linguavoice_speak | AI 提供选中的文字，真实合成，返回 AudioContent + 元数据 |
+| linguavoice_speak | AI 提供本次选中的文字，真实合成，仅返回简短状态和重播编号；音频保留在本机 |
 | linguavoice_get_audio | 按任务 ID 获取已有结果，不重新合成 |
 | linguavoice_playback | 请求本机播放器 pause/resume/stop |
 | linguavoice_open_console | 在后端电脑上打开设置控制台，不在手机开本机页面 |
@@ -65,3 +65,6 @@ Qwen 参考包的 voice.json 格式：
 录音路径必须位于 ZIP 内，长度 3～30 秒；声音提示由本机模型生成。来源许可在导入时由用户确认。GPT-SoVITS 参考为 3～10 秒。
 
 `GET /api/support` 返回版本、语言、导入格式、功能和当前安装的声音。真实测试标记保存在本机验证文件中；未测试的安装不会继承其他电脑的“本机已实测”。
+
+
+聊天容量保护：MCP 工具不返回 WAV/base64，包括旧参数 include_audio=true 和网页播放模式。原录音仍可通过已授权的本机网页接口播放；重播不重新合成。此保护不清除旧聊天里的历史工具结果，也不改变 ChatGPT 的对话长度限制。
