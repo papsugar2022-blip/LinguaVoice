@@ -10,7 +10,7 @@
 
 当前为开发预览版：已有电脑上的真实语音合成与播放已验证；全新电脑完整安装、免费 ChatGPT 账号和手机端尚未完成验收。请勿将“可下载安装器”理解为所有账号安装即用。
 
-安装器与源码见仓库的 **Releases** 页面。安装器约 12 MB；首次运行仅下载勾选的引擎和底模。默认勾选“自定义导入（V5Turbo 声音包）”；需要秋猫时，另勾选“自带声音（作者自制：秋猫）”。只选 V5 不下载 Qwen 模型及其运行环境。空间提示包含解压缓存，不是下载量。
+当前安装器：[LinguaVoice-Setup-v0.3.9.exe](https://github.com/papsugar2022-blip/LinguaVoice/releases/download/v0.3.9-preview/LinguaVoice-Setup-v0.3.9.exe)（约 12.8 MB）。[v0.3.9 更新说明与源码](https://github.com/papsugar2022-blip/LinguaVoice/releases/tag/v0.3.9-preview)；后续版本见 [Releases](https://github.com/papsugar2022-blip/LinguaVoice/releases)。首次运行仅下载勾选的引擎和底模。默认勾选“自定义导入（V5Turbo 声音包）”；需要秋猫时，另勾选“自带声音（作者自制：秋猫）”。只选 V5 不下载 Qwen 模型及其运行环境。空间提示包含解压缓存，不是下载量。
 
 让 ChatGPT 自己选择需要说的话，用你选好的声音聊天和教学。文字与语音独立：代码、公式、标题和动作描写通常只显示，语音自然解释思路。无需逐句复制台词。
 
