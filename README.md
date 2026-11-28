@@ -2,15 +2,15 @@
 
 <img src="assets/branding/linguavoice.png" width="96" alt="LinguaVoice 图标">
 
-**v0.3.9 预览版 · Windows / NVIDIA · 自定义导入 / 自带声音自由勾选**
+**v0.3.10 预览版 · Windows / NVIDIA · 自定义导入 / 自带声音自由勾选**
 
-本次同步：安装包已包含本机 GPT-SoVITS 引擎的标点分句修正（cut5），减少整段长文本一次推理造成的末尾漏字风险；是否读全仍需实际试听，不能以播放结束代替验收。云端规则插件 1.0.7 与软件安装包 0.3.9 是独立版本，本版已同步相应漏字排障说明。
+本次同步：安装包已包含本机 GPT-SoVITS 引擎的标点分句修正（cut5），减少整段长文本一次推理造成的末尾漏字风险；是否读全仍需实际试听，不能以播放结束代替验收。云端规则插件 1.0.8 与软件安装包 0.3.10 是独立版本，本版已同步相应漏字排障说明。
 
 本次修复：语音工具仅返回简短状态和重播编号，所有播放模式均不再向聊天回传 WAV / base64 音频（包括旧参数调用）。电脑自动播放、暂停和重播保留；网页仍可播放原录音。此修复减少工具结果负担，不能自动恢复已达到长度上限的旧聊天，也不能保证永远不会达到平台限制。
 
 当前为开发预览版：已有电脑上的真实语音合成与播放已验证；全新电脑完整安装、免费 ChatGPT 账号和手机端尚未完成验收。请勿将“可下载安装器”理解为所有账号安装即用。
 
-当前安装器：[LinguaVoice-Setup-v0.3.9.exe](https://github.com/papsugar2022-blip/LinguaVoice/releases/download/v0.3.9-preview/LinguaVoice-Setup-v0.3.9.exe)（约 12.8 MB）。[v0.3.9 更新说明与源码](https://github.com/papsugar2022-blip/LinguaVoice/releases/tag/v0.3.9-preview)；后续版本见 [Releases](https://github.com/papsugar2022-blip/LinguaVoice/releases)。首次运行仅下载勾选的引擎和底模。默认勾选“自定义导入（V5Turbo 声音包）”；需要秋猫时，另勾选“自带声音（作者自制：秋猫）”。只选 V5 不下载 Qwen 模型及其运行环境。空间提示包含解压缓存，不是下载量。
+当前安装器：[LinguaVoice-Setup-v0.3.10.exe](https://github.com/papsugar2022-blip/LinguaVoice/releases/download/v0.3.10-preview/LinguaVoice-Setup-v0.3.10.exe)（约 12.8 MB）。[v0.3.10 更新说明与源码](https://github.com/papsugar2022-blip/LinguaVoice/releases/tag/v0.3.10-preview)；后续版本见 [Releases](https://github.com/papsugar2022-blip/LinguaVoice/releases)。首次运行仅下载勾选的引擎和底模。默认勾选“自定义导入（V5Turbo 声音包）”；需要秋猫时，另勾选“自带声音（作者自制：秋猫）”。只选 V5 不下载 Qwen 模型及其运行环境。空间提示包含解压缓存，不是下载量。
 
 让 ChatGPT 自己选择需要说的话，用你选好的声音聊天和教学。文字与语音独立：代码、公式、标题和动作描写通常只显示，语音自然解释思路。无需逐句复制台词。
 
@@ -60,3 +60,5 @@ node tests/test_upload_ui.js
 真实合成测试需要模型与 GPU。普通单元测试不产生模拟试听音频。引擎依赖在独立进程中运行，避免不同版本冲突；切换后端会释放旧进程的显存。
 
 文档：[安装](docs/INSTALL.md) · [API](docs/API.md) · [验收](docs/TESTING.md) · [表达规则](docs/ROLE_EXPRESSION.md) · [许可](THIRD_PARTY_NOTICES.md)。自有程序采用 MIT；第三方组件按其原许可。
+
+本版补充教学选句核对：本轮目标词和完整例句应进入语音，不能以搭配短语替代例句，过长则分段。此项为 AI 选句指导，实际聊天覆盖率仍需验证，不宣称消除所有漏读。
