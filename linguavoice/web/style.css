@@ -3,3 +3,5 @@
 .support-table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0 22px}.support-table th,.support-table td{text-align:left;padding:12px 10px;border-bottom:1px solid #e5e8ef;vertical-align:top}.support-table th{background:#f6f7fb}.support-table td:first-child{min-width:100px}#supportContent li{margin:8px 0}
 
 #supportSection{overflow-wrap:anywhere}#supportContent{overflow-x:auto}#supportContent h3{margin-top:26px}.support-table td:nth-child(2){min-width:110px}@media(max-width:600px){.support-table th,.support-table td{padding:9px 6px;font-size:13px}}
+
+.current-reading{border-left:3px solid #27856b;padding:10px 14px;background:#edf6ef;white-space:pre-wrap}

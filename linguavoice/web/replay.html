@@ -6,17 +6,57 @@
 body{margin:0;padding:12px}main{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1px solid light-dark(#d6e7e1,#39534d);border-radius:16px;padding:14px;background:light-dark(#f5fbf8,#142b27)}
 .info{flex:1;min-width:120px}strong{display:block}p{margin:5px 0 0;font-size:12px;opacity:.8}
 button{font:inherit;font-weight:600;border:0;border-radius:24px;background:#147e78;color:white;padding:12px 20px;cursor:pointer}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:3px solid #61cbb6;outline-offset:3px}
+.reading{flex-basis:100%;border-top:1px solid #8aa99b55;padding-top:10px;line-height:1.65}.reading[hidden]{display:none}.reading strong{color:#168779;font-size:12px}.reading p{font-size:15px;opacity:1;white-space:pre-wrap}.actions{display:flex;gap:8px;flex-wrap:wrap}.secondary{background:light-dark(#dfede7,#2b4940);color:inherit}
 </style>
-<main><div class="info"><strong id="voice">这段语音</strong><p id="status" role="status" aria-live="polite">正在连接播放器…</p></div><button id="replay" disabled>▶ 再听一遍</button></main>
+<main><div class="info"><strong id="voice">这段语音</strong><p id="status" role="status" aria-live="polite">正在连接播放器…</p></div><div class="actions"><button id="pause" class="secondary" disabled>⏸ 暂停朗读</button><button id="resume" class="secondary" disabled>▶ 继续朗读</button><button id="replay" disabled>↻ 再听一遍</button></div><section id="reading" class="reading" hidden><strong id="readingLabel">正在读取播放位置…</strong><p id="readingText"></p></section></main>
 <script>
 'use strict';
 const button=document.getElementById('replay'),status=document.getElementById('status'),voice=document.getElementById('voice');
 let job=null,ready=false,busy=false,sequence=0;const pending=new Map();
 const legacy=false;
+const pauseButton=document.getElementById('pause'),resumeButton=document.getElementById('resume');
+const reading=document.getElementById('reading'),readingLabel=document.getElementById('readingLabel'),readingText=document.getElementById('readingText');
+let watching=null,pollTimer=null,polling=false,controlBusy=false;
+async function callTool(name,args){return legacy?window.openai.callTool(name,args):rpc('tools/call',{name,arguments:args});}
+function schedulePoll(delay=800){clearTimeout(pollTimer);pollTimer=setTimeout(pollPosition,delay);}
+function renderReading(data){
+ pauseButton.disabled=controlBusy||!data.active||data.state!=='playing';
+ resumeButton.disabled=controlBusy||!data.active||data.state!=='paused';
+ reading.hidden=!data.show_indicator;
+ if(reading.hidden){readingText.textContent='';return;}
+ const labels={playing:'● 正在读',paused:'Ⅱ 已暂停',ended:'✓ 已读完',stopped:'已停止',waiting:'等待播放',armed:'等待播放',error:'播放失败'};
+ readingLabel.textContent=(labels[data.state]||'等待播放')+(data.active&&data.segment_index?' · 第 '+data.segment_index+' / '+data.segment_count+' 段':'');
+ readingText.textContent=data.hidden_text?'听力原文已隐藏':data.between_segments?'句间停顿…':data.current_text||'';
+}
+async function pollPosition(){
+ if(polling||!ready||!job)return;
+ if(document.visibilityState==='hidden'){schedulePoll(1500);return;}
+ polling=true;
+ try{
+  const result=await callTool('linguavoice_card_status',{job_id:job.id});
+  if(result?.isError)throw Error('无法读取位置');
+  const envelopes=[result,result?.mcp_tool_result,result?.call_tool_result,result?.toolResponseMetadata,window.openai?.toolResponseMetadata,window.openai?.toolResponseMetadata?.mcp_tool_result,window.openai?.toolResponseMetadata?.call_tool_result];
+  const data=envelopes.map(v=>v?._meta?.reading||v?.reading).find(v=>v?.id===job.id);
+  if(!data||data.id!==job.id)throw Error('当前连接尚未提供播放位置');
+  renderReading(data);
+  if(!['ended','stopped','error'].includes(data.state))schedulePoll(data.active?800:2000);
+ }catch(e){pauseButton.disabled=true;resumeButton.disabled=true;reading.hidden=false;readingLabel.textContent='播放位置暂不可用';readingText.textContent=String(e.message||'连接失败')+'；可先在声音设置中暂停。';}
+ finally{polling=false;}
+}
+async function control(action){
+ if(controlBusy||!job)return;controlBusy=true;pauseButton.disabled=true;resumeButton.disabled=true;
+ try{const result=await callTool('linguavoice_card_control',{job_id:job.id,action});
+  if(result?.isError)throw Error(result.content?.find(c=>c.type==='text')?.text||'播放控制失败');
+  if(result?.structuredContent?.requested!==action)throw Error('未收到播放控制确认');
+  status.textContent=action==='pause'?'已请求暂停朗读':'已请求继续朗读';
+ }catch(e){status.textContent=e.message;}
+ finally{controlBusy=false;schedulePoll(100);}
+}
+pauseButton.onclick=()=>control('pause');resumeButton.onclick=()=>control('resume');
 function rpc(method,params){return new Promise((resolve,reject)=>{const id=++sequence;const replay=method==='tools/call';const timer=setTimeout(()=>{pending.delete(id);reject(new Error(replay?'暂未收到播放确认；如果已经听到，请勿重复点击。':'播放器连接超时，请稍后重新打开卡片。'));},replay?120000:15000);pending.set(id,{resolve,reject,timer});window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');});}
 function update(result){const data=result?.structuredContent;if(!data?.id||!(/^[a-f0-9]{32}$/).test(data.id))return;
  if(job&&job.id!==data.id)return;job=data;voice.textContent=data.voice_name||'这段语音';
- status.textContent=data.status==='ready'?'重播这段录音，无需重新生成':'这段语音尚未准备好';button.disabled=!ready||busy||data.status!=='ready';}
+ status.textContent=data.status==='ready'?'重播这段录音，无需重新生成':'这段语音尚未准备好';button.disabled=!ready||busy||data.status!=='ready';if(ready&&watching!==job.id){watching=job.id;schedulePoll(0);}}
 window.addEventListener('message',event=>{if(event.source!==window.parent)return;const msg=event.data;if(!msg||msg.jsonrpc!=='2.0')return;
  if(pending.has(msg.id)){const item=pending.get(msg.id);pending.delete(msg.id);clearTimeout(item.timer);msg.error?item.reject(new Error(msg.error.message||'连接失败')):item.resolve(msg.result);return;}
  if(msg.method==='ui/notifications/tool-result')update(msg.params);
@@ -27,10 +67,10 @@ button.onclick=async()=>{if(!ready||busy||job?.status!=='ready')return;busy=true
  try{const result=legacy?await window.openai.callTool('linguavoice_replay',{job_id:job.id}):await rpc('tools/call',{name:'linguavoice_replay',arguments:{job_id:job.id}});
  if(result?.isError)throw new Error(result.content?.find(c=>c.type==='text')?.text||'无法重播，请确认本机播放器已开启。');
  if(!result?.structuredContent?.queued)throw new Error('未收到重播确认，请稍后重试。');
- status.textContent='已请求在电脑上重播';
+ status.textContent='已请求在电脑上重播';schedulePoll(100);
  }catch(error){status.textContent=error.message;}finally{clearTimeout(slowNotice);busy=false;button.disabled=!ready||job?.status!=='ready';}};
 if(legacy){ready=true;update({structuredContent:window.openai.toolOutput});}
-else rpc('ui/initialize',{appInfo:{name:'LinguaVoice Replay',version:'0.3.4'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(()=>{
+else rpc('ui/initialize',{appInfo:{name:'LinguaVoice Replay',version:'0.3.11'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(()=>{
  ready=true;window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized',params:{}},'*');
  if(job)update({structuredContent:job});else status.textContent='等待这段语音…';
 }).catch(()=>{status.textContent='当前客户端未连接播放卡片，可在声音设置中重播。';});

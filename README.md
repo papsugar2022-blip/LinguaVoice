@@ -2,15 +2,17 @@
 
 <img src="assets/branding/linguavoice.png" width="96" alt="LinguaVoice 图标">
 
-**v0.3.10 预览版 · Windows / NVIDIA · 自定义导入 / 自带声音自由勾选**
+**v0.3.11 预览版 · Windows / NVIDIA · 自定义导入 / 自带声音自由勾选**
 
-本次同步：安装包已包含本机 GPT-SoVITS 引擎的标点分句修正（cut5），减少整段长文本一次推理造成的末尾漏字风险；是否读全仍需实际试听，不能以播放结束代替验收。云端规则插件 1.0.8 与软件安装包 0.3.10 是独立版本，本版已同步相应漏字排障说明。
+本次新增：新语音按已选台词分段合成，段间默认停顿 0.45 秒，可在设置调整；播放卡片显示当前段落，提供“暂停朗读 / 继续朗读 / 再听一遍”。“显示正在朗读的内容”可关闭，指示位于语音卡片，不会插入 ChatGPT 正文。过渡语由 AI 随本轮台词一次组织，不另开分析轮、不扫描历史。
+
+此前同步：安装包已包含本机 GPT-SoVITS 引擎的标点分句修正（cut5），减少整段长文本一次推理造成的末尾漏字风险；是否读全仍需实际试听，不能以播放结束代替验收。云端规则插件 1.0.9 与软件安装包 0.3.11 是独立版本，本版已同步相应漏字排障说明。
 
 本次修复：语音工具仅返回简短状态和重播编号，所有播放模式均不再向聊天回传 WAV / base64 音频（包括旧参数调用）。电脑自动播放、暂停和重播保留；网页仍可播放原录音。此修复减少工具结果负担，不能自动恢复已达到长度上限的旧聊天，也不能保证永远不会达到平台限制。
 
 当前为开发预览版：已有电脑上的真实语音合成与播放已验证；全新电脑完整安装、免费 ChatGPT 账号和手机端尚未完成验收。请勿将“可下载安装器”理解为所有账号安装即用。
 
-当前安装器：[LinguaVoice-Setup-v0.3.10.exe](https://github.com/papsugar2022-blip/LinguaVoice/releases/download/v0.3.10-preview/LinguaVoice-Setup-v0.3.10.exe)（约 12.8 MB）。[v0.3.10 更新说明与源码](https://github.com/papsugar2022-blip/LinguaVoice/releases/tag/v0.3.10-preview)；后续版本见 [Releases](https://github.com/papsugar2022-blip/LinguaVoice/releases)。首次运行仅下载勾选的引擎和底模。默认勾选“自定义导入（V5Turbo 声音包）”；需要秋猫时，另勾选“自带声音（作者自制：秋猫）”。只选 V5 不下载 Qwen 模型及其运行环境。空间提示包含解压缓存，不是下载量。
+当前安装器：[LinguaVoice-Setup-v0.3.11.exe](https://github.com/papsugar2022-blip/LinguaVoice/releases/download/v0.3.11-preview/LinguaVoice-Setup-v0.3.11.exe)（约 12.8 MB）。[v0.3.11 更新说明与源码](https://github.com/papsugar2022-blip/LinguaVoice/releases/tag/v0.3.11-preview)；后续版本见 [Releases](https://github.com/papsugar2022-blip/LinguaVoice/releases)。首次运行仅下载勾选的引擎和底模。默认勾选“自定义导入（V5Turbo 声音包）”；需要秋猫时，另勾选“自带声音（作者自制：秋猫）”。只选 V5 不下载 Qwen 模型及其运行环境。空间提示包含解压缓存，不是下载量。
 
 让 ChatGPT 自己选择需要说的话，用你选好的声音聊天和教学。文字与语音独立：代码、公式、标题和动作描写通常只显示，语音自然解释思路。无需逐句复制台词。
 
@@ -38,7 +40,7 @@
 
 支持语速 0.6～1.5、自动播放开关、暂停、继续、停止、重播、全局统一音色、隐藏听力原文和设置备份。隐藏原文不保证客户端工具参数不可见。
 
-本机普通 ChatGPT 桌面聊天已实际验证绿色“再听一遍”卡片，点击可重播对应录音，无需重新合成。连接更新后在插件设置中刷新工具与界面资源。详见 [重播说明](docs/REPLAY.md)。
+2026-11-28 已在本机普通 ChatGPT 桌面聊天实际点击验证：卡片重播、显示当前段落、暂停后保持位置、继续播放。卡片控制经过连接传输，提示可能稍晚于声音；不是逐字字幕。设置页可直接控制本机播放器。连接更新后在插件设置中刷新工具与界面资源。详见 [重播说明](docs/REPLAY.md)。
 
 ## 平台边界
 

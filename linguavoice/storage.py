@@ -58,6 +58,8 @@ class Store:
                     self.data['voices'][voice['id']] = voice
                     self.data['settings']['default_voice'] = voice['id']
             write_json(self.path, self.data)
+        self.data['settings'].setdefault('show_reading_indicator', True)
+        self.data['settings'].setdefault('sentence_pause', .45)
         from .catalog import provenance
         for voice in self.data['voices'].values():
             digest = voice.get('archive_sha256', '')
@@ -104,14 +106,19 @@ class Store:
         return {'settings': data['settings'], 'voices': voices}
 
     def update_settings(self, changes):
-        allowed = {'speed', 'autoplay', 'speech_enabled', 'default_voice', 'role_bindings', 'desktop_playback'}
+        allowed = {'speed', 'autoplay', 'speech_enabled', 'default_voice', 'role_bindings', 'desktop_playback', 'show_reading_indicator', 'sentence_pause'}
         if set(changes) - allowed:
             raise ValueError('包含未知设置')
         with self.lock:
             new = {**self.data['settings'], **changes}
             new['speed'] = speed_value(new['speed'])
             new.setdefault('desktop_playback', True)
-            for key in ('autoplay', 'speech_enabled', 'desktop_playback'):
+            new.setdefault('show_reading_indicator', True)
+            pause = new.get('sentence_pause', .45)
+            if type(pause) not in (int, float) or not math.isfinite(pause) or not 0 <= pause <= 2:
+                raise ValueError('句间停顿必须为 0～2 秒')
+            new['sentence_pause'] = float(pause)
+            for key in ('autoplay', 'speech_enabled', 'desktop_playback', 'show_reading_indicator'):
                 if type(new[key]) is not bool:
                     raise ValueError(f'{key} 必须是布尔值')
             if new['default_voice'] not in self.data['voices'] and new['default_voice'] != '':

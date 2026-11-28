@@ -27,7 +27,8 @@ def main():
                         from linguavoice.engine import GPTSoVITSBackend
                         backend=GPTSoVITSBackend()
                     else:raise ValueError('未接入此语音引擎')
-                result=backend.synthesize(request['voice'],request['text'],request['language'],request['speed'],Path(request['destination']))
+                from linguavoice.segments import synthesize_segments
+                result=synthesize_segments(backend,request['voice'],request['text'],request['language'],request['speed'],Path(request['destination']))
             reply={'ok':True,'result':result}
         except Exception as exc:
             import traceback

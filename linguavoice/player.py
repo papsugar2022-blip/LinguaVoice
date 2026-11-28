@@ -26,8 +26,10 @@ class DesktopPlayer:
         with self.condition:
             self.queue.put_nowait((job_id, path, self.epoch, manual))
 
-    def control(self, action):
+    def control(self, action, job_id=None):
         with self.condition:
+            if job_id is not None and (self.state.get('job_id') != job_id or self.state['state'] not in {'playing', 'paused'}):
+                raise ValueError('这段语音当前没有播放，不能控制其他录音')
             if action == 'pause':
                 self.paused = True
             elif action == 'resume':
@@ -74,6 +76,8 @@ class DesktopPlayer:
                 else:
                     factory = self.stream_factory
                 stream = factory(samplerate=rate, channels=data.shape[1], dtype='float32', latency='low')
+                with self.condition:
+                    self.state.update(job_id=job_id, position=0.0, duration=len(data)/rate)
                 stream.start()
                 started = False
                 for offset in range(0, len(data), 1024):
@@ -90,6 +94,8 @@ class DesktopPlayer:
                         stream.start()
                         self._status(job_id, 'playing')
                     stream.write(data[offset:offset+1024])
+                    with self.condition:
+                        self.state['position'] = min(offset + 1024, len(data)) / rate
                     if not started:
                         started = True
                         self._status(job_id, 'playing')

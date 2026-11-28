@@ -88,6 +88,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, support_state(self.server.store))
             if path.startswith('/api/installs/'):
                 return self.send(200, self.server.installer.get(path.rsplit('/', 1)[-1]))
+            if path.startswith('/api/card-status/'):
+                return self.send(200, self.server.service.card_status(path.rsplit('/',1)[-1]))
             if path.startswith('/api/jobs/'):
                 return self.send(200, self.server.service.job(path.rsplit('/',1)[-1]))
             if path.startswith('/api/references/'):
@@ -160,6 +162,8 @@ class Handler(BaseHTTPRequestHandler):
                     start()
             elif path == '/api/speak':
                 result = service.submit(**data)
+            elif path == '/api/card-control':
+                result = service.card_control(data['job_id'], data['action'])
             elif path == '/api/control':
                 result = service.control(data.get('action'))
             elif path == '/api/replay':

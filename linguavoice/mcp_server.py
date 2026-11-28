@@ -81,13 +81,14 @@ async def resource_diagnostics(ctx, call_next):
 
 server = MCPServer('LinguaVoice', version=__version__, instructions=INSTRUCTIONS,
                    middleware=[resource_diagnostics])
-REPLAY_UI = 'ui://linguavoice/replay-v3.html'
-CHATGPT_REPLAY_UI = 'ui://linguavoice/replay-chatgpt-v3.html'
+REPLAY_UI = 'ui://linguavoice/replay-v5.html'
+CHATGPT_REPLAY_UI = 'ui://linguavoice/replay-chatgpt-v5.html'
 CARD_META = {'ui': {'resourceUri': REPLAY_UI}, 'openai/outputTemplate': CHATGPT_REPLAY_UI}
 
 
 @server.resource(REPLAY_UI, mime_type='text/html;profile=mcp-app',
                  meta={'ui': {'prefersBorder': True}})
+@server.resource('ui://linguavoice/replay-v3.html', mime_type='text/html;profile=mcp-app', meta={'ui': {'prefersBorder': True}})
 @server.resource('ui://linguavoice/replay-v2.html', mime_type='text/html;profile=mcp-app',
                  meta={'ui': {'prefersBorder': True}})
 @server.resource('ui://linguavoice/replay-v1.html', mime_type='text/html;profile=mcp-app',
@@ -99,6 +100,7 @@ def replay_card() -> str:
 @server.resource(CHATGPT_REPLAY_UI, mime_type='text/html+skybridge',
                  meta={'openai/widgetPrefersBorder': True,
                        'openai/widgetAccessible': True})
+@server.resource('ui://linguavoice/replay-chatgpt-v3.html', mime_type='text/html+skybridge', meta={'openai/widgetPrefersBorder': True, 'openai/widgetAccessible': True})
 @server.resource('ui://linguavoice/replay-chatgpt-v2.html', mime_type='text/html+skybridge',
                  meta={'openai/widgetPrefersBorder': True,
                        'openai/widgetAccessible': True})
@@ -188,6 +190,26 @@ async def linguavoice_replay(job_id: str) -> types.CallToolResult:
     await asyncio.to_thread(ensure_service)
     result = await asyncio.to_thread(request, '/api/replay', {'job_id':job_id})
     return types.CallToolResult(content=[types.TextContent(text='已请求重播这段录音，无需重新合成。')], structuredContent=result)
+
+
+@server.tool(annotations=READ, structured_output=False,
+             meta={'ui': {'visibility': ['app']}, 'openai/widgetAccessible': True, 'openai/visibility': 'private'})
+async def linguavoice_card_status(job_id: str) -> types.CallToolResult:
+    """Playback UI only: read current recording position without invoking the model."""
+    if len(job_id) != 32 or any(c not in '0123456789abcdef' for c in job_id):
+        raise ValueError('无效任务ID')
+    data = await asyncio.to_thread(request, '/api/card-status/' + job_id)
+    return types.CallToolResult(content=[], structuredContent={'id': job_id}, _meta={'reading': data})
+
+
+@server.tool(annotations=WRITE, structured_output=False,
+             meta={'ui': {'visibility': ['app']}, 'openai/widgetAccessible': True, 'openai/visibility': 'private'})
+async def linguavoice_card_control(job_id: str, action: Literal['pause', 'resume']) -> types.CallToolResult:
+    """Playback UI only: pause or resume this recording; never controls another chat."""
+    if len(job_id) != 32 or any(c not in '0123456789abcdef' for c in job_id):
+        raise ValueError('无效任务ID')
+    data = await asyncio.to_thread(request, '/api/card-control', {'job_id': job_id, 'action': action})
+    return types.CallToolResult(content=[], structuredContent=data)
 
 
 @server.tool(annotations=WRITE)

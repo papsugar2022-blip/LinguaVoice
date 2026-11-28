@@ -22,6 +22,19 @@ async function main(){
  const failed=el('replay').onclick();const call=sent.at(-1);
  send({id:call.id,result:{isError:true,content:[{type:'text',text:'这段语音已过期'}]}});await failed;
  assert.equal(el('status').textContent,'这段语音已过期');assert.equal(el('replay').disabled,false);
+ // Status polling reads actual backend state; controls remain bound to this card.
+ const poll=[...timers.values()].find(t=>t.ms===100);assert.ok(poll);
+ const polling=poll.fn();const statusCall=sent.at(-1);
+ assert.equal(statusCall.params.name,'linguavoice_card_status');
+ send({id:statusCall.id,result:{structuredContent:{id},_meta:{reading:{id,state:'playing',active:true,show_indicator:true,current_text:'Example sentence.',segment_index:2,segment_count:3}}}});
+ await polling;
+ assert.equal(el('readingText').textContent,'Example sentence.');assert.equal(el('pause').disabled,false);
+ const pausing=el('pause').onclick();const pauseCall=sent.at(-1);
+ assert.equal(pauseCall.params.name,'linguavoice_card_control');assert.equal(pauseCall.params.arguments.job_id,id);assert.equal(pauseCall.params.arguments.action,'pause');
+ send({id:pauseCall.id,result:{structuredContent:{requested:'pause'}}});await pausing;
+ const poll2=[...timers.values()].find(t=>t.ms===100).fn();const second=sent.at(-1);
+ send({id:second.id,result:{_meta:{reading:{id,state:'paused',active:true,show_indicator:false,current_text:'must not display'}}}});await poll2;
+ assert.equal(el('reading').hidden,true);assert.equal(el('readingText').textContent,'');assert.equal(el('resume').disabled,false);
  // The hosted ChatGPT compatibility resource uses its own documented bridge.
  const legacyCalls=[],legacyElements=new Map();
  const legacyEl=id=>{if(!legacyElements.has(id))legacyElements.set(id,{disabled:true,textContent:''});return legacyElements.get(id);};
@@ -33,6 +46,11 @@ async function main(){
  assert.equal(legacyEl('replay').disabled,false);await legacyEl('replay').onclick();
  assert.equal(legacyCalls.length,1);assert.equal(legacyCalls[0].name,'linguavoice_replay');
  assert.equal(legacyCalls[0].args.job_id,id);assert.match(legacyEl('status').textContent,/已请求/);
+ lc.window.openai.callTool=async()=>({structuredContent:{id}});
+ lc.window.openai.toolResponseMetadata={mcp_tool_result:{_meta:{reading:{id,state:'playing',active:true,show_indicator:true,current_text:'Wrapped metadata.'}}}};
+ await vm.runInContext('pollPosition()',lc);
+ assert.equal(legacyEl('readingText').textContent,'Wrapped metadata.');
+ assert.equal(legacyEl('pause').disabled,false);
  console.log('PASS: bound recording, duplicate-click guard, result handling and errors. No audio synthesized.');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

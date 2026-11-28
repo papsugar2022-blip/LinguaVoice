@@ -1,4 +1,5 @@
 import copy
+import json
 import queue
 import threading
 import time
@@ -14,6 +15,16 @@ class VoiceService:
         self.audio_dir = store.directory/'audio'
         self.audio_dir.mkdir(exist_ok=True)
         self.jobs = {}
+        self.history_file = store.directory/'ready-jobs.json'
+        if self.history_file.is_file():
+            try:
+                for job in json.loads(self.history_file.read_text(encoding='utf-8'))[-80:]:
+                    jid = job.get('id', '')
+                    if len(jid) == 32 and all(c in '0123456789abcdef' for c in jid) and job.get('status') == 'ready' and (self.audio_dir/(jid+'.wav')).is_file():
+                        job.update(cancelled=False, playback_status='stopped')
+                        self.jobs[jid] = job
+            except (ValueError, TypeError, KeyError, AttributeError, OSError):
+                self.jobs = {}
         self.lock = threading.RLock()
         self.queue = queue.Queue(maxsize=12)
         self.state = 'idle'
@@ -35,6 +46,7 @@ class VoiceService:
         if not settings['speech_enabled']:
             raise ValueError('语音功能已关闭')
         voice = self.store.voice(voice_id, role)
+        voice['sentence_pause'] = settings.get('sentence_pause', .45)
         from .model_versions import VERSIONS
         if voice['provider'] == 'gpt-sovits' and voice['version'] not in VERSIONS:
             raise ValueError('当前精简版只启用 V5Turbo 和秋猫引擎；此声音的原文件仍保留在本机')
@@ -70,6 +82,7 @@ class VoiceService:
         job.pop('cancelled', None)
         if job['hide_text'] and not reveal:
             job.pop('text', None)
+            job.pop('segments', None)
         if job['status'] == 'ready':
             job['audio_path'] = '/api/audio/' + job_id + '.wav'
         return job
@@ -98,6 +111,33 @@ class VoiceService:
             if self.player:
                 self.player.control(action)
             return {'requested': action, 'delivery': '已发送至电脑播放器' if self.player else '等待控制台播放器执行'}
+
+    def card_status(self, job_id):
+        job = self.job(job_id)
+        settings = self.store.snapshot()['settings']
+        playback = self.player.snapshot() if self.player else {}
+        active = playback.get('job_id') == job_id and playback.get('state') in {'playing', 'paused'}
+        state = playback.get('state') if playback.get('job_id') == job_id else job.get('playback_status', 'waiting')
+        position = playback.get('position', 0) if playback.get('job_id') == job_id else 0
+        segments = job.get('segments', [])
+        current = next(((i, s) for i, s in enumerate(segments) if s['start'] <= position < s['end']), None)
+        show = settings.get('show_reading_indicator', True) and not job['hide_text']
+        return {'id': job_id, 'state': state, 'active': active,
+                'desktop': job.get('playback_target') == 'desktop',
+                'show_indicator': settings.get('show_reading_indicator', True),
+                'hidden_text': job['hide_text'], 'position': position,
+                'duration': job.get('seconds', 0), 'segment_count': len(segments),
+                'segment_index': current[0] + 1 if current and active else None,
+                'current_text': current[1]['text'] if show and current and active else '',
+                'between_segments': bool(active and segments and not current)}
+
+    def card_control(self, job_id, action):
+        if action not in {'pause', 'resume'}:
+            raise ValueError('卡片只支持暂停或继续')
+        if not self.player:
+            raise ValueError('请在网页播放器中暂停或继续')
+        self.player.control(action, job_id=job_id)
+        return {'requested': action, 'job_id': job_id}
 
     def _play_allowed(self, manual=False):
         settings = self.store.snapshot()['settings']
@@ -146,6 +186,12 @@ class VoiceService:
                     job.update(result)
                     job['ready_at'] = time.time()
                     job['status'] = 'cancelled' if job['cancelled'] else 'ready'
+                    from .storage import write_json
+                    try:
+                        write_json(self.history_file, [j for j in self.jobs.values() if j['status'] == 'ready'])
+                    except OSError:
+                        # Disk history failure must not cancel an already generated recording.
+                        pass
                     if job['status'] == 'ready' and job['playback_target'] == 'desktop' and self._play_allowed():
                         self.player.enqueue(job_id, self.audio_dir/(job_id+'.wav'))
             except Exception as exc:

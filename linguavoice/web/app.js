@@ -80,7 +80,7 @@ async function refresh(){
     const previous=state;state=await api('/api/state');$('lamp').className='online';
     if(!previous){for(const j of state.jobs){if(j.status==='ready')seen.add(j.id);}commandRevision=state.command.revision;}
     $('engineStatus').textContent=state.engine_state==='generating'?'显卡正在合成':'本机服务已连接';
-    if(!initialized){renderVoices();$('speed').value=state.settings.speed;$('speedValue').textContent=Number(state.settings.speed).toFixed(2)+'×';$('autoplay').checked=state.settings.autoplay;$('speechEnabled').checked=state.settings.speech_enabled;$('desktopPlayback').checked=state.settings.desktop_playback!==false;initialized=true;}
+    if(!initialized){renderVoices();$('speed').value=state.settings.speed;$('speedValue').textContent=Number(state.settings.speed).toFixed(2)+'×';$('autoplay').checked=state.settings.autoplay;$('speechEnabled').checked=state.settings.speech_enabled;$('desktopPlayback').checked=state.settings.desktop_playback!==false;$('readingIndicator').checked=state.settings.show_reading_indicator!==false;$('sentencePause').value=String(state.settings.sentence_pause??.45);initialized=true;}
     else if(JSON.stringify(previous.voices)!==JSON.stringify(state.voices))renderVoices();
     $('startup').checked=!!state.background?.startup_enabled;
     $('connectionHelp').textContent=state.background?.message||'首次使用需要连接自己的 ChatGPT 账号。';
@@ -94,6 +94,12 @@ async function refresh(){
     $('synthesize').disabled=auditionWaiting;$('synthesize').textContent=auditionWaiting?'正在准备声音…':'试听这句话';
     $('tryInstalled').disabled=auditionWaiting||!installedReady;
     for(const j of state.jobs){if(manualJobs.has(j.id)&&j.status==='error'){manualJobs.delete(j.id);notice('试听没有完成：'+j.error,true);}}
+    const indicator=$('currentReading');indicator.hidden=state.settings.show_reading_indicator===false;
+    const activeJob=state.jobs.find(j=>j.id===(busy?playingId:state.playback?.job_id));
+    const position=busy?audio.currentTime:state.playback?.position||0;
+    const readingActive=busy?!audio.ended:['playing','paused'].includes(state.playback?.state);
+    const segment=activeJob?.segments?.find(s=>s.start<=position&&position<s.end);
+    indicator.textContent=readingActive?(activeJob?.hide_text?'听力原文已隐藏':segment?'● '+segment.text:'句间停顿…'):'';
     const signature=JSON.stringify(state.jobs);
     if(signature!==refresh.lastJobs){renderJobs(state.jobs);refresh.lastJobs=signature;}
     if(state.command.revision>commandRevision){commandRevision=state.command.revision;
@@ -112,10 +118,12 @@ $('speed').onchange=saveSettings;
 $('autoplay').onchange=saveSettings;
 $('speechEnabled').onchange=saveSettings;
 $('desktopPlayback').onchange=saveSettings;
+$('readingIndicator').onchange=saveSettings;
+$('sentencePause').onchange=saveSettings;
 $('startup').onchange=async()=>{try{await api('/api/startup','POST',{enabled:$('startup').checked});notice('自动准备设置已保存。');await refresh();}catch(e){notice(e.message,true);}};
 let saving=Promise.resolve();
 function saveSettings(){
-  const chosen={speed:Number($('speed').value),default_voice:$('voice').value,autoplay:$('autoplay').checked,speech_enabled:$('speechEnabled').checked,desktop_playback:$('desktopPlayback').checked};
+  const chosen={speed:Number($('speed').value),default_voice:$('voice').value,autoplay:$('autoplay').checked,speech_enabled:$('speechEnabled').checked,desktop_playback:$('desktopPlayback').checked,show_reading_indicator:$('readingIndicator').checked,sentence_pause:Number($('sentencePause').value)};
   saving=saving.then(async()=>{await api('/api/settings','POST',chosen);notice('设置已自动保存。');await refresh();}).catch(e=>notice('设置未保存：'+e.message,true));
   return saving;
 }
