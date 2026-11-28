@@ -289,72 +289,172 @@ def install_gpt(root,python,manifest,cache,report,cancelled,env):
     command([python,'-c',"import torch,onnxruntime,peft,rich; assert torch.ones(64,device='cuda').sum().item()==64"],root,report,cancelled,env)
 
 
+RELEASES_URL = 'https://github.com/papsugar2022-blip/LinguaVoice/releases'
+
+
+def version_number(value):
+    match = re.fullmatch(r'v?(\d+)\.(\d+)\.(\d+)(?:-preview)?', value or '')
+    return tuple(map(int, match.groups())) if match else None
+
+
+def source_version(root):
+    try:
+        text = (Path(root)/'linguavoice/__init__.py').read_text(encoding='utf-8')
+        match = re.search(r"__version__\s*=\s*['\"]([^'\"]+)", text)
+        return match[1] if match and version_number(match[1]) else None
+    except OSError:
+        return None
+
+
+def bundled_version():
+    if not getattr(sys, 'frozen', False):
+        return source_version(Path(__file__).resolve().parents[1])
+    with zipfile.ZipFile(ASSETS/'source.zip') as archive:
+        text = archive.read('LinguaVoice/linguavoice/__init__.py').decode('utf-8')
+        return re.search(r"__version__\s*=\s*['\"]([^'\"]+)", text)[1]
+
+
+def latest_release():
+    # The project currently ships previews; /latest excludes them.
+    request = urllib.request.Request('https://api.github.com/repos/papsugar2022-blip/LinguaVoice/releases?per_page=30',
+        headers={'User-Agent': 'LinguaVoice-Setup', 'Accept': 'application/vnd.github+json'})
+    with urllib.request.urlopen(request, timeout=15) as response:
+        releases = json.load(response)
+    choices = []
+    for release in releases:
+        number = version_number(release.get('tag_name'))
+        if release.get('draft') or not number:
+            continue
+        expected = 'LinguaVoice-Setup-v' + '.'.join(map(str, number)) + '.exe'
+        if any(a.get('name') == expected for a in release.get('assets', [])):
+            choices.append((number, release['tag_name']))
+    if not choices:
+        raise ValueError('暂时没有可下载的安装包')
+    return max(choices)
+
+
 def main():
-    window=tk.Tk();window.title('LinguaVoice · 安装与启动');window.geometry('780x650')
+    import webbrowser
+    window=tk.Tk();window.title('LinguaVoice · 安装与更新');window.geometry('820x680');window.minsize(780,650)
     icon=ASSETS/'linguavoice.ico' if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[1]/'assets/branding/linguavoice.ico'
     if icon.is_file():window.iconbitmap(str(icon))
-    ttk.Style().configure('.',font=('Microsoft YaHei UI',10))
+    style=ttk.Style();style.configure('.',font=('Microsoft YaHei UI',10))
+    style.configure('Title.TLabel',font=('Microsoft YaHei UI',18,'bold'))
     frame=ttk.Frame(window,padding=24);frame.pack(fill='both',expand=True)
-    ttk.Label(frame,text='让 ChatGPT 用你选好的声音说话',font=('Microsoft YaHei UI',16,'bold')).pack(anchor='w')
-    ttk.Label(frame,text='Windows / NVIDIA 显卡。按勾选内容下载，不强制安装秋猫。\nV5 角色包需按作者许可自行导入；不包含账号或第三方角色录音。',wraplength=650).pack(anchor='w',pady=12)
-    activation=ttk.LabelFrame(frame,text='日常使用：打开 ChatGPT，直接 @',padding=12)
-    activation.pack(fill='x',pady=(0,12))
-    ttk.Label(activation,text='输入 @ → 从列表选择 LinguaVoice → 发送你想聊的话。\n不用另发启用口令；同一聊天后续正常交流即可。',font=('Microsoft YaHei UI',10,'bold'),wraplength=680).pack(anchor='w')
-    ttk.Label(activation,text='停止播放：在聊天里说“停止播放”，或点网页里的“停止播放”。\n关闭后续语音：打开“网页设置”，关掉“让 AI 说话”；重新打开即可恢复。',wraplength=680).pack(anchor='w',pady=(6,0))
-    ttk.Label(activation,text='首次安装并连接一次；新聊天再 @ 选择插件。\n网页开启“登录电脑后自动准备”后，日常不用再开安装器。',wraplength=680).pack(anchor='w',pady=(6,0))
-    location=tk.StringVar(value=r'D:\AIProjects\LinguaVoice' if Path('D:/').exists() else str(Path.home()/'LinguaVoice'))
-    ttk.Label(frame,text='安装位置').pack(anchor='w')
-    entry=ttk.Entry(frame,textvariable=location);entry.pack(fill='x',pady=5)
-    ttk.Button(frame,text='选择文件夹',command=lambda:location.set(filedialog.askdirectory() or location.get())).pack(anchor='w')
-    ttk.Label(frame,text='使用范围：程序代码为 MIT。第三方组件、模型和参考录音遵守各自许可。\n不允许通过安装包转卖或冒充第三方资源；请保留来源和署名。',wraplength=650).pack(anchor='w',pady=14)
+    ttk.Label(frame,text='LinguaVoice · 安装与更新',style='Title.TLabel').pack(anchor='w')
+    package=bundled_version()
+    versions=tk.StringVar();ttk.Label(frame,textvariable=versions).pack(anchor='w',pady=(8,12))
+    default=r'D:\AIProjects\LinguaVoice' if Path('D:/').exists() else str(Path.home()/'LinguaVoice')
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\LinguaVoice') as key:
+            default=winreg.QueryValueEx(key,'InstallPath')[0]
+    except OSError:pass
+    location=tk.StringVar(value=default)
+    notices=tk.StringVar(value='先选择安装目录。检查更新只查询版本，不会开始安装或下载模型。')
+    messages=queue.Queue();cancelled=threading.Event();running=False;checking=False
+    targetbox=ttk.LabelFrame(frame,text='安装目录',padding=10);targetbox.pack(fill='x',pady=(0,12))
+    entry=ttk.Entry(targetbox,textvariable=location);entry.pack(side='left',fill='x',expand=True)
+    choose=ttk.Button(targetbox,text='选择文件夹',command=lambda:location.set(filedialog.askdirectory() or location.get()));choose.pack(side='right',padx=(8,0))
+    choices=ttk.LabelFrame(frame,text='需要哪些声音支持？',padding=12);choices.pack(fill='x')
     extra=tk.BooleanVar(value=True);qwen=tk.BooleanVar(value=False)
-    choices=ttk.Frame(frame);choices.pack(fill='x')
-    ttk.Checkbutton(choices,text='自定义导入（V5Turbo 声音包）',variable=extra).pack(side='left')
-    ttk.Checkbutton(choices,text='自带声音（作者自制：秋猫）',variable=qwen).pack(side='left',padx=12)
-    space=tk.StringVar()
+    gpt_choice=ttk.Checkbutton(choices,text='自定义导入：V5Turbo（角色声音包需自行导入）',variable=extra);gpt_choice.pack(anchor='w')
+    qwen_choice=ttk.Checkbutton(choices,text='自带声音：秋猫（作者自制，可选）',variable=qwen);qwen_choice.pack(anchor='w',pady=(6,0))
+    space=tk.StringVar();ttk.Label(choices,textvariable=space,wraplength=710).pack(anchor='w',pady=(8,0))
     def show_space(*_):
-        try:space.set(f'安装时建议预留 {required_space_gb(extra.get(),qwen.get())} GB（含解压缓存，不是下载量）。未勾选不会卸载已有声音。')
-        except ValueError:space.set('请至少勾选一项；只用 V5 角色包无需勾选秋猫。')
+        try:space.set(f'首次安装预留 {required_space_gb(extra.get(),qwen.get())} GB，包含解压缓存，不是安装包大小。')
+        except ValueError:space.set('安装或修复前，请至少选择一种声音支持。')
     extra.trace_add('write',show_space);qwen.trace_add('write',show_space);show_space()
-    ttk.Label(frame,textvariable=space,wraplength=680).pack(anchor='w',pady=(4,0))
-    notices=tk.StringVar(value='已经连接过：直接回 ChatGPT 使用。只有首次配置或连接异常时才需要下方连接设置。')
-    ttk.Label(frame,textvariable=notices,wraplength=650).pack(anchor='w',pady=10)
-    bar=ttk.Progressbar(frame,mode='determinate',value=0)
-    messages=queue.Queue();cancelled=threading.Event();running=False
-    buttons=ttk.Frame(frame);buttons.pack(fill='x',pady=10)
+    ttk.Label(frame,textvariable=notices,wraplength=710).pack(anchor='w',pady=12)
+    bar=ttk.Progressbar(frame,mode='indeterminate')
+    actions=ttk.Frame(frame);actions.pack(fill='x',pady=(0,12))
+    def refresh(*_):
+        installed=source_version(location.get())
+        ready=bool(installed and (Path(location.get())/'.venv/Scripts/pythonw.exe').is_file())
+        versions.set(f'此安装包：{package}     所选目录：'+(f'已安装 {installed}' if installed else '尚未安装'))
+        newer=installed and version_number(installed)>version_number(package)
+        primary.config(text='立即安装' if not installed else f'更新到 {package}' if version_number(installed)<version_number(package) else '已是此安装包版本' if not newer else '请下载新版安装包',state='normal' if not running and not checking and (not installed or version_number(installed)<version_number(package)) else 'disabled')
+        repair.config(state='normal' if installed and not newer and not running and not checking else 'disabled')
+        check.config(state='disabled' if running or checking else 'normal')
+        for button in (settings,connection):button.config(state='normal' if ready and not running else 'disabled')
+        for control in (entry,choose,gpt_choice,qwen_choice):control.config(state='disabled' if running else 'normal')
+        if running:cancel.pack(side='right')
+        else:cancel.pack_forget()
+    def load_selection(*_):
+        try:
+            saved=json.loads((Path(location.get())/'private/install-selection.json').read_text(encoding='utf-8'))
+            extra.set(bool(saved['gpt']));qwen.set(bool(saved['qwen']))
+        except (OSError,ValueError,KeyError,TypeError):pass
+        refresh()
+        notices.set('已找到安装目录。检查更新只查询版本，不会开始安装。' if source_version(location.get()) else '此目录尚未安装，点击“立即安装”开始。检查更新不会下载模型。')
     def begin():
         nonlocal running
         if running:return
         try:required_space_gb(extra.get(),qwen.get())
         except ValueError as exc:notices.set(str(exc));return
-        running=True;cancelled.clear();start_button.config(state='disabled');entry.config(state='disabled');bar.config(mode='indeterminate');bar.pack(fill='x',pady=8,before=buttons);bar.start()
+        installed=source_version(location.get())
+        if installed and version_number(installed)>version_number(package):
+            notices.set('本机版本更新，不会用旧安装包覆盖；请先检查更新。');return
         target=location.get();include_gpt=extra.get();include_qwen=qwen.get()
+        running=True;cancelled.clear();cancel.config(state='normal',text='取消本次安装');refresh()
+        notices.set('正在准备，请稍候。已有音色和设置会保留。')
+        bar.pack(fill='x',pady=(0,10),before=actions);bar.start()
         def worker():
             try:
                 install(target,lambda text:messages.put(('progress',text)),cancelled,include_gpt,include_qwen)
-                messages.put(('done','安装完成。请到网页设置导入 / 选择声音并试听，再完成首次连接。以后回 ChatGPT 直接 @ 使用。'))
+                messages.put(('done','已完成。打开网页设置试听；更新后请到 ChatGPT 的 LinguaVoice 设置刷新工具。'))
             except Exception as exc:messages.put(('done',str(exc)))
         threading.Thread(target=worker,daemon=True).start()
+    def check_update():
+        nonlocal checking
+        checking=True;refresh();notices.set('正在查询 GitHub 最新安装包，不下载模型…')
+        def worker():
+            try:messages.put(('release',latest_release()))
+            except Exception:messages.put(('check_error','检查更新失败，可能是网络暂时无法访问 GitHub。可以稍后重试，或打开下载页。'))
+        threading.Thread(target=worker,daemon=True).start()
+    def stop():
+        cancelled.set();cancel.config(state='disabled',text='正在取消…')
+        notices.set('正在取消，请等当前步骤停止；已下载的文件保留，方便下次继续。')
     def launch(script):
         root=Path(location.get());python=root/'.venv/Scripts/pythonw.exe'
-        if running:notices.set('请等安装完成后再打开。');return
-        if not python.is_file():notices.set('请先安装程序。');return
+        if running or not python.is_file():return
         subprocess.Popen([str(python),*script],cwd=root,creationflags=FLAGS)
-    start_button=ttk.Button(buttons,text='安装 / 检查修复',command=begin);start_button.pack(side='left',padx=3)
-    ttk.Button(buttons,text='网页设置',command=lambda:launch(['-m','linguavoice.server','--open'])).pack(side='left',padx=3)
-    ttk.Button(buttons,text='首次连接 / 修复',command=lambda:launch(['scripts/connect_chatgpt.py'])).pack(side='left',padx=3)
-    ttk.Button(buttons,text='停止安装',command=cancelled.set).pack(side='left',padx=3)
+    primary=ttk.Button(actions,command=begin);primary.pack(side='left',padx=(0,8))
+    check=ttk.Button(actions,text='检查更新',command=check_update);check.pack(side='left',padx=(0,8))
+    repair=ttk.Button(actions,text='修复安装',command=begin);repair.pack(side='left',padx=(0,8))
+    cancel=ttk.Button(actions,text='取消本次安装',command=stop)
+    download_button=ttk.Button(frame,text='打开版本下载页',command=lambda:webbrowser.open(RELEASES_URL));download_button.pack(anchor='w')
+    daily=ttk.LabelFrame(frame,text='已安装？从这里使用',padding=12);daily.pack(fill='x',pady=14)
+    dailybuttons=ttk.Frame(daily);dailybuttons.pack(anchor='w')
+    settings=ttk.Button(dailybuttons,text='打开声音设置',command=lambda:launch(['-m','linguavoice.server','--open']));settings.pack(side='left',padx=(0,8))
+    connection=ttk.Button(dailybuttons,text='连接 ChatGPT',command=lambda:launch(['scripts/connect_chatgpt.py']));connection.pack(side='left')
+    ttk.Label(daily,text='连接一次后，在 ChatGPT 输入 @，选择 LinguaVoice 再聊天。\n停止当前声音：说“停止播放”；关闭后续语音：声音设置 → 关闭“让 AI 说话”。',wraplength=700).pack(anchor='w',pady=(10,0))
+    ttk.Label(frame,text='仅支持 Windows / NVIDIA。程序代码 MIT；声音模型遵守各自许可。\n第三方角色模型与私人凭据不随安装包发布；未勾选不会删除已有音色。',wraplength=710).pack(anchor='w')
+    location.trace_add('write',load_selection);load_selection()
     def poll():
-        nonlocal running
+        nonlocal running,checking
         try:
             while True:
-                kind,text=messages.get_nowait();notices.set(text)
-                if kind=='done':running=False;bar.stop();bar.pack_forget();start_button.config(state='normal');entry.config(state='normal')
+                kind,value=messages.get_nowait()
+                if kind=='release':
+                    checking=False;number,tag=value;refresh()
+                    current=source_version(location.get())
+                    if number>version_number(package):
+                        notices.set(f'发现新版 {tag}。请点“下载新版安装包”，下载后运行，选择原目录更新。')
+                        download_button.config(text='下载新版安装包',command=lambda t=tag:webbrowser.open(RELEASES_URL+'/tag/'+t))
+                    elif number<version_number(package):
+                        notices.set(f'GitHub 最新发布为 {tag}；此安装包 {package} 比公开版本更新。')
+                    elif current and version_number(current)<version_number(package):
+                        notices.set(f'此安装包已是最新发布版本；点击“更新到 {package}”更新所选目录。')
+                    else:notices.set('没有发现更新的安装包。'+('本机已是最新版本。' if current else '还未安装，点击“立即安装”。'))
+                elif kind=='check_error':checking=False;notices.set(value);refresh()
+                else:
+                    notices.set(value)
+                    if kind=='done':running=False;bar.stop();bar.pack_forget();refresh()
         except queue.Empty:pass
         window.after(150,poll)
     def close():
-        if running:
-            cancelled.set();notices.set('正在停止安装，请等候；已下载的文件会保留以便重试。')
+        if running:stop()
         else:window.destroy()
     window.protocol('WM_DELETE_WINDOW',close);window.after(150,poll);window.mainloop()
 
